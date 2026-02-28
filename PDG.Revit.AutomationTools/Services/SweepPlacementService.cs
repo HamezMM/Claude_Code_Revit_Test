@@ -48,8 +48,8 @@ namespace PDG.Revit.AutomationTools.Services
                 // User supplies millimetres; Revit expects decimal feet (internal units).
                 Distance = UnitConversionHelper.MmToFeet(options.OffsetFromBaseMm),
 
-                // Exterior face placement ensures the baseboard is on the outside of the wall.
-                // FlipSweep (set post-create below) further enforces the outward profile orientation.
+                // WallSide.Exterior places the sweep on the exterior face of the wall,
+                // which is the correct outward-facing orientation for a baseboard.
                 WallSide = WallSide.Exterior
             };
 
@@ -64,10 +64,6 @@ namespace PDG.Revit.AutomationTools.Services
                     PlacementStatus.Failed,
                     "WallSweep.Create returned null.");
             }
-
-            // Enforce outward-facing profile orientation per spec (flips the sweep profile
-            // so the baseboard face points away from the wall interior).
-            sweep.FlipSweep = true;
 
             return new SweepPlacementResult(wall.Id, wallTypeName, PlacementStatus.Placed);
         }
