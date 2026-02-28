@@ -1,0 +1,133 @@
+<Window
+    x:Class="PDG.Revit.AutomationTools.Views.ResultsSummaryDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="PDG Tools — Wall Base Sweep Results"
+    Width="520"
+    SizeToContent="Height"
+    MinHeight="160"
+    MaxHeight="600"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterOwner"
+    Background="#F5F5F5">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Summary header -->
+        <TextBlock Grid.Row="0"
+                   Text="{Binding SummaryText}"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Foreground="#1A1A1A"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12"/>
+
+        <!-- Skipped / Failed section header — hidden when none -->
+        <TextBlock Grid.Row="1"
+                   Text="Skipped / Failed walls:"
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Foreground="#555"
+                   Margin="0,0,0,4">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasNonPlacedResults}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <!-- Detail list of skipped / failed results -->
+        <Border Grid.Row="2"
+                BorderBrush="#CCCCCC"
+                BorderThickness="1"
+                Background="White"
+                MaxHeight="360"
+                Margin="0,0,0,12">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasNonPlacedResults}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding NonPlacedResults}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="6,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Status badge -->
+                                <Border Grid.Column="0"
+                                        CornerRadius="2"
+                                        Padding="4,1"
+                                        Margin="0,0,8,0">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Status}" Value="Skipped">
+                                                    <Setter Property="Background" Value="#E8A020"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                    <Setter Property="Background" Value="#C0392B"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding Status}"
+                                               Foreground="White"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"/>
+                                </Border>
+
+                                <!-- Wall ID and type -->
+                                <TextBlock Grid.Column="1"
+                                           FontSize="11"
+                                           Foreground="#333"
+                                           Margin="0,0,8,0">
+                                    <Run Text="Wall "/>
+                                    <Run Text="{Binding WallId.IntegerValue}"/>
+                                    <Run Text=" ("/>
+                                    <Run Text="{Binding WallTypeName}"/>
+                                    <Run Text=")"/>
+                                </TextBlock>
+
+                                <!-- Reason -->
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding Reason}"
+                                           FontSize="11"
+                                           Foreground="#666"
+                                           TextWrapping="Wrap"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Close button -->
+        <Button Grid.Row="3"
+                Content="Close"
+                HorizontalAlignment="Right"
+                Padding="18,6"
+                FontSize="12"
+                MinWidth="90"
+                Click="CloseButton_Click"/>
+    </Grid>
+</Window>
