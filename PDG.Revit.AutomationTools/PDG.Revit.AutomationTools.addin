@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>PDG AutomationTools</Name>
+    <Assembly>PDG.Revit.AutomationTools.dll</Assembly>
+    <AddInId>7A3B6D8E-1F2C-4A5E-9D0B-3C7F8E2A1B4D</AddInId>
+    <FullClassName>PDG.Revit.AutomationTools.App</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+  </AddIn>
+</RevitAddIns>
