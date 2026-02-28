@@ -1,0 +1,25 @@
+# ── Build outputs ────────────────────────────────────────────────────────
+bin/
+obj/
+
+# ── Visual Studio machine-specific files ─────────────────────────────────
+# .user files contain local paths (Revit install dir) and debug preferences
+*.user
+
+# Visual Studio solution user options
+*.suo
+.vs/
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# ── NuGet ─────────────────────────────────────────────────────────────────
+*.nupkg
+packages/
+# NuGet restore lock file — commit this if you want reproducible restores
+# package-lock.json
+
+# ── OS noise ──────────────────────────────────────────────────────────────
+Thumbs.db
+.DS_Store
