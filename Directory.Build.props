@@ -1,0 +1,23 @@
+<Project>
+
+  <PropertyGroup>
+    <RevitVersion>2024</RevitVersion>
+
+    <!--
+      Path to the Revit 2024 installation directory.
+      Default: standard Autodesk install location.
+      Override by setting REVIT_INSTALL_PATH as a system environment variable,
+      or by editing this value if Revit is installed elsewhere.
+    -->
+    <RevitInstallPath Condition="'$(REVIT_INSTALL_PATH)' != ''">$(REVIT_INSTALL_PATH)</RevitInstallPath>
+    <RevitInstallPath Condition="'$(RevitInstallPath)' == ''">C:\Program Files\Autodesk\Revit $(RevitVersion)</RevitInstallPath>
+
+    <!--
+      Revit per-user addins folder — where the .addin manifest and compiled DLL
+      are deployed on each Debug build so Revit loads them on next launch.
+      %AppData% expands to C:\Users\<you>\AppData\Roaming at build time.
+    -->
+    <RevitAddinsFolder>$(AppData)\Autodesk\Revit\Addins\$(RevitVersion)\</RevitAddinsFolder>
+  </PropertyGroup>
+
+</Project>
