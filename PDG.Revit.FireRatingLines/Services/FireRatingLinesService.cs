@@ -13,7 +13,7 @@ namespace PDG.Revit.FireRatingLines.Services
     /// Encapsulates all four stages of the fire-rating lines workflow:
     /// 1. Discover fire-rated wall types — returns wallTypeId → ratingKey for every rated type.
     /// 2. Resolve matching GraphicsStyle line styles.
-    /// 3. Collect fire-rated walls visible in sheeted plan/section views.
+    /// 3. Collect fire-rated walls visible in any non-template plan/section view.
     /// 4. Delete stale lines and draw fresh detail lines.
     /// </summary>
     public class FireRatingLinesService
@@ -24,7 +24,7 @@ namespace PDG.Revit.FireRatingLines.Services
 
         /// <summary>
         /// Returns a mapping of WallType.Id.Value → trimmed fire rating key for every WallType
-        /// in the document whose WALL_ATTR_FIRE_RATING_PARAM is non-null and non-empty.
+        /// in the document whose Fire Rating type parameter is non-null and non-empty.
         ///
         /// Using wallTypeId as key (rather than ratingKey) ensures that ALL rated wall types
         /// are represented — including multiple wall types that share the same rating string.
@@ -33,10 +33,15 @@ namespace PDG.Revit.FireRatingLines.Services
         /// </summary>
         // PDG API NOTE 2026-03-01: FilteredElementCollector.OfClass(typeof(WallType)).WhereElementIsElementType()
         //   Verified: revitapidocs.com/2024/ — returns WallType elements only.
-        // PDG API NOTE 2026-03-01: WallType.LookupParameter("Fire Rating")
-        //   Verified: revitapidocs.com/2024/ — BuiltInParameter.WALL_ATTR_FIRE_RATING_PARAM does not
-        //   exist in the Revit 2024 API. The Fire Rating type parameter must be accessed via
-        //   LookupParameter("Fire Rating"). StorageType.String guard is required before AsString().
+        // PDG API NOTE 2026-03-01: BuiltInParameter.DOOR_FIRE_RATING
+        //   Verified: revitapidocs.com/2024/ — DOOR_FIRE_RATING is the correct built-in enum member
+        //   for the "Fire Rating" type parameter on WallType (and Door) elements in Revit 2024.
+        //   The earlier WALL_ATTR_FIRE_RATING_PARAM name does not exist in the Revit 2024 API.
+        //   get_Parameter(BuiltInParameter) is locale-independent and always preferred over
+        //   LookupParameter("Fire Rating"), which searches by display name and may return null
+        //   in non-English Revit installations or on types where no value has been set yet.
+        //   LookupParameter("Fire Rating") is kept as a fallback to support shared/project
+        //   parameters added under the same display name.
         // PDG API NOTE 2026-03-01: ElementId.Value (Int64)
         //   Use .Value throughout. Never deprecated .IntegerValue.
         public Dictionary<long, string> GetFireRatedWallTypes(Document doc)
@@ -52,8 +57,11 @@ namespace PDG.Revit.FireRatingLines.Services
 
             foreach (var wt in wallTypes)
             {
-                // PDG API NOTE 2026-03-01: Verified against revitapidocs.com/2024/
-                var param = wt.LookupParameter("Fire Rating");
+                // PDG API NOTE 2026-03-01: BuiltInParameter.DOOR_FIRE_RATING
+                //   Verified: revitapidocs.com/2024/ — primary lookup by internal enum (locale-safe).
+                //   LookupParameter("Fire Rating") is the fallback for shared/project parameters.
+                var param = wt.get_Parameter(BuiltInParameter.DOOR_FIRE_RATING)
+                          ?? wt.LookupParameter("Fire Rating");
                 if (param == null || param.StorageType != StorageType.String) continue;
 
                 var ratingValue = param.AsString();
@@ -141,13 +149,16 @@ namespace PDG.Revit.FireRatingLines.Services
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Collects all fire-rated wall instances that are visible in plan or section views
-        /// currently placed on sheets. Applies cut-plane straddling checks for plan views.
-        /// Deduplicates by (wallId, viewId) so each annotation is drawn exactly once
-        /// even when a view appears on multiple sheets.
+        /// Collects all fire-rated wall instances that are visible in any non-template
+        /// FloorPlan, CeilingPlan, or Section view in the document. Applies cut-plane
+        /// straddling checks for plan views. Deduplicates by (wallId, viewId) so each
+        /// annotation is drawn exactly once even if a wall appears in multiple views.
         /// </summary>
-        // PDG API NOTE 2026-03-01: ViewSheet.GetAllPlacedViews()
-        //   Verified: revitapidocs.com/2024/ — returns ICollection<ElementId> of views on the sheet.
+        // PDG API NOTE 2026-03-01: FilteredElementCollector(doc).OfClass(typeof(View))
+        //   Verified: revitapidocs.com/2024/ — returns all View elements; filtered by ViewType
+        //   and IsTemplate to select only live plan and section views.
+        //   Changed from sheeted-views-only to all eligible views so the tool works before
+        //   views are placed on sheets (e.g. during early design or QA review).
         // PDG API NOTE 2026-03-01: new FilteredElementCollector(doc, view.Id).OfClass(typeof(Wall))
         //   Verified: revitapidocs.com/2024/ — view-scoped collector returns elements visible in that view.
         //   ⚠ CRITICAL: This includes walls shown in projection below the cut plane.
@@ -158,7 +169,6 @@ namespace PDG.Revit.FireRatingLines.Services
         //   Verified: revitapidocs.com/2024/ — pass null for world space (not view-local).
         // TODO v2: RevitLinkInstance support — walls in linked models are not collected here.
         //   See RevitLinkInstance.GetTotalTransform() for the v2 approach.
-        // PDG: Check shared/PDG.Revit.Shared/ — GetSheetedViews() may already exist.
         public List<FireRatingWall> GetFireRatedWallsInViews(
             Document doc,
             Dictionary<long, string> wallTypeIdToRating)
@@ -167,29 +177,23 @@ namespace PDG.Revit.FireRatingLines.Services
             if (wallTypeIdToRating == null) throw new ArgumentNullException(nameof(wallTypeIdToRating));
 
             var result = new List<FireRatingWall>();
-            // Dedup key: (wallId, viewId) — prevents duplicate annotation when the same
-            // view is placed on more than one sheet.
+            // Dedup key: (wallId, viewId) — prevents drawing the same line twice if the
+            // same wall appears in multiple overlapping views.
             var seen = new HashSet<(long wallId, long viewId)>();
 
-            // Step 1: Collect all unique view Ids placed on any sheet.
-            var sheetedViewIds = new FilteredElementCollector(doc)
-                .OfClass(typeof(ViewSheet))
-                .Cast<ViewSheet>()
-                .SelectMany(s => s.GetAllPlacedViews())
-                .Select(id => id.Value)
-                .Distinct()
-                .ToList();
-
-            // Step 2: Resolve views, filter to FloorPlan / CeilingPlan / Section.
-            var targetViews = sheetedViewIds
-                .Select(id => doc.GetElement(new ElementId(id)) as View)
-                .Where(v => v != null && !v.IsTemplate && (
+            // Collect all non-template FloorPlan, CeilingPlan, and Section views.
+            // This includes views not yet placed on sheets so the tool works during
+            // early design and QA review, not only in fully sheeted sets.
+            var targetViews = new FilteredElementCollector(doc)
+                .OfClass(typeof(View))
+                .Cast<View>()
+                .Where(v => !v.IsTemplate && (
                     v.ViewType == ViewType.FloorPlan ||
                     v.ViewType == ViewType.CeilingPlan ||
                     v.ViewType == ViewType.Section))
                 .ToList();
 
-            // Step 3: For each view, collect walls and apply filters.
+            // For each view, collect walls and apply filters.
             foreach (var view in targetViews)
             {
                 // Determine cut-plane elevation for plan views.
