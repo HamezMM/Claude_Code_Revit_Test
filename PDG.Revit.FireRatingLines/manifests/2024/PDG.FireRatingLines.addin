@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>PDG FireRatingLines</Name>
+    <Assembly>PDG.Revit.FireRatingLines.dll</Assembly>
+    <!-- PDG GENERATED: Fresh GUID — do not reuse from any other addin -->
+    <AddInId>3CF61E48-4162-4CF3-9322-510588A4227A</AddInId>
+    <FullClassName>PDG.Revit.FireRatingLines.App</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+  </AddIn>
+</RevitAddIns>
