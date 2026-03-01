@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+
+  <!-- Application: loads on Revit startup, registers the Fire Rating Lines button -->
+  <AddIn Type="Application">
+    <Name>PDG FireRatingLines</Name>
+    <Assembly>PDG.Revit.FireRatingLines.dll</Assembly>
+    <!-- PDG GENERATED: Fresh GUID — do not reuse from any other addin -->
+    <AddInId>63707C65-0329-4F7F-BA56-0BD46108EE48</AddInId>
+    <FullClassName>PDG.Revit.FireRatingLines.App</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+  </AddIn>
+
+  <!-- Command: registers the command so Revit can resolve it from the ribbon
+       button and expose it in the Keyboard Shortcuts dialog -->
+  <AddIn Type="Command">
+    <Name>PDG Fire Rating Lines</Name>
+    <Assembly>PDG.Revit.FireRatingLines.dll</Assembly>
+    <!-- PDG GENERATED: Fresh GUID — do not reuse from any other addin -->
+    <AddInId>E63E895F-9DFB-4B09-9061-9FEED62AF372</AddInId>
+    <FullClassName>PDG.Revit.FireRatingLines.Commands.FireRatingLinesCmd</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+    <Text>Fire Rating Lines</Text>
+    <Description>Draw fire-rating annotation detail lines at wall centrelines in sheeted views.</Description>
+    <LongDescription>Annotates every fire-rated wall visible in a sheeted plan or section view. Ensures standard line styles exist (45 MIN, 1 HR, 1.5 HR, 2 HR, 3 HR, 4 HR), creating any that are missing, then deletes stale lines and redraws fresh ones.</LongDescription>
+    <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
+  </AddIn>
+
+</RevitAddIns>

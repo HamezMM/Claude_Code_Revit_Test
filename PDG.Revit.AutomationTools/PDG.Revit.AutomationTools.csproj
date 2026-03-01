@@ -91,7 +91,7 @@
 
     <!-- Copy the .addin manifest so Revit discovers the assembly -->
     <Copy
-      SourceFiles="$(MSBuildProjectDirectory)\..\manifests\2024\PDG.AutomationTools.addin"
+      SourceFiles="$(MSBuildProjectDirectory)\PDG.AutomationTools.addin"
       DestinationFolder="$(RevitAddinsFolder)"
       SkipUnchangedFiles="true" />
 

@@ -145,20 +145,85 @@ namespace PDG.Revit.FireRatingLines.Services
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        // Stage 2b — Ensure Standard Fire Rating Line Styles Exist
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Ensures that a line style (OST_Lines projection subcategory) exists in the
+        /// document for every entry in <see cref="FireRatingStandards.StandardRatings"/>.
+        /// Any missing styles are created in a single Transaction before drawing begins.
+        /// Returns a dictionary of ratingName → GraphicsStyle for all standard ratings.
+        /// </summary>
+        // PDG API NOTE 2026-03-01: doc.Settings.Categories.NewSubcategory(parentCategory, name)
+        //   Verified: revitapidocs.com/2024/ — creates a new named subcategory under the given
+        //   parent category. Must be called inside a Transaction.
+        // PDG API NOTE 2026-03-01: Category.GetGraphicsStyle(GraphicsStyleType.Projection)
+        //   Verified: revitapidocs.com/2024/ — returns the projection GraphicsStyle element for
+        //   the subcategory. Revit creates both Projection and Cut styles automatically.
+        public Dictionary<string, GraphicsStyle> EnsureFireRatingLineStyles(Document doc)
+        {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+
+            // Find any already-existing standard line styles.
+            var result = GetMatchingLineStyles(doc, FireRatingStandards.StandardRatings);
+
+            var missing = FireRatingStandards.StandardRatings
+                .Where(r => !result.ContainsKey(r))
+                .ToList();
+
+            if (missing.Count == 0) return result;
+
+            // Create a subcategory under OST_Lines for each missing rating name.
+            using (var tx = new Transaction(doc, "PDG: Create Fire Rating Line Styles"))
+            {
+                tx.Start();
+
+                var linesCategory = Category.GetCategory(doc, BuiltInCategory.OST_Lines);
+                if (linesCategory == null)
+                {
+                    PDGLogger.Warning(
+                        "PDG FireRatingLines: OST_Lines category not found — cannot create line styles.");
+                    tx.RollBack();
+                    return result;
+                }
+
+                foreach (var name in missing)
+                {
+                    var subCat = doc.Settings.Categories.NewSubcategory(linesCategory, name);
+                    var gs = subCat.GetGraphicsStyle(GraphicsStyleType.Projection);
+                    if (gs != null)
+                    {
+                        result[name] = gs;
+                        PDGLogger.Info($"PDG FireRatingLines: Created line style '{name}'.");
+                    }
+                    else
+                    {
+                        PDGLogger.Warning(
+                            $"PDG FireRatingLines: Created subcategory '{name}' but could not " +
+                            $"retrieve its projection GraphicsStyle.");
+                    }
+                }
+
+                tx.Commit();
+            }
+
+            return result;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         // Stage 3 — Walls in Sheeted Views
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Collects all fire-rated wall instances that are visible in any non-template
-        /// FloorPlan, CeilingPlan, or Section view in the document. Applies cut-plane
-        /// straddling checks for plan views. Deduplicates by (wallId, viewId) so each
-        /// annotation is drawn exactly once even if a wall appears in multiple views.
+        /// FloorPlan, CeilingPlan, or Section view that is currently placed on a sheet.
+        /// Applies cut-plane straddling checks for plan views. Deduplicates by (wallId, viewId)
+        /// so each annotation is drawn exactly once even if a wall appears in multiple views.
         /// </summary>
-        // PDG API NOTE 2026-03-01: FilteredElementCollector(doc).OfClass(typeof(View))
-        //   Verified: revitapidocs.com/2024/ — returns all View elements; filtered by ViewType
-        //   and IsTemplate to select only live plan and section views.
-        //   Changed from sheeted-views-only to all eligible views so the tool works before
-        //   views are placed on sheets (e.g. during early design or QA review).
+        // PDG API NOTE 2026-03-01: FilteredElementCollector(doc).OfClass(typeof(ViewSheet))
+        //   Verified: revitapidocs.com/2024/ — returns all ViewSheet elements.
+        //   sheet.GetAllViewports() returns the ElementIds of Viewport instances on the sheet.
+        //   Each Viewport.ViewId identifies the view displayed in that viewport.
         // PDG API NOTE 2026-03-01: new FilteredElementCollector(doc, view.Id).OfClass(typeof(Wall))
         //   Verified: revitapidocs.com/2024/ — view-scoped collector returns elements visible in that view.
         //   ⚠ CRITICAL: This includes walls shown in projection below the cut plane.
@@ -178,19 +243,34 @@ namespace PDG.Revit.FireRatingLines.Services
 
             var result = new List<FireRatingWall>();
             // Dedup key: (wallId, viewId) — prevents drawing the same line twice if the
-            // same wall appears in multiple overlapping views.
+            // same wall appears in multiple overlapping views or on multiple sheets.
             var seen = new HashSet<(long wallId, long viewId)>();
 
-            // Collect all non-template FloorPlan, CeilingPlan, and Section views.
-            // This includes views not yet placed on sheets so the tool works during
-            // early design and QA review, not only in fully sheeted sets.
+            // Build the set of view IDs that are placed on at least one sheet.
+            // A view placed on two sheets still produces only one (wall, view) entry
+            // because the dedup set above handles it.
+            var sheetedViewIds = new HashSet<long>();
+            foreach (var sheet in new FilteredElementCollector(doc)
+                .OfClass(typeof(ViewSheet))
+                .Cast<ViewSheet>())
+            {
+                foreach (var vpId in sheet.GetAllViewports())
+                {
+                    var vp = doc.GetElement(vpId) as Viewport;
+                    if (vp != null)
+                        sheetedViewIds.Add(vp.ViewId.Value);
+                }
+            }
+
+            // Collect non-template plan and section views that are placed on sheets.
             var targetViews = new FilteredElementCollector(doc)
                 .OfClass(typeof(View))
                 .Cast<View>()
-                .Where(v => !v.IsTemplate && (
-                    v.ViewType == ViewType.FloorPlan ||
-                    v.ViewType == ViewType.CeilingPlan ||
-                    v.ViewType == ViewType.Section))
+                .Where(v => !v.IsTemplate &&
+                            sheetedViewIds.Contains(v.Id.Value) &&
+                            (v.ViewType == ViewType.FloorPlan ||
+                             v.ViewType == ViewType.CeilingPlan ||
+                             v.ViewType == ViewType.Section))
                 .ToList();
 
             // For each view, collect walls and apply filters.
