@@ -28,4 +28,20 @@
     <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
   </AddIn>
 
+
+  <!-- Command: registers the door fire rating update command -->
+  <AddIn Type="Command">
+    <Name>PDG Update Door Fire Ratings</Name>
+    <Assembly>PDG.Revit.FireRatingLines.dll</Assembly>
+    <!-- PDG GENERATED: Fresh GUID — do not reuse from any other addin -->
+    <AddInId>4633CF92-0BD6-4130-8EFF-0BFBDBB96DAA</AddInId>
+    <FullClassName>PDG.Revit.FireRatingLines.Commands.UpdateDoorFireRatingCmd</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+    <Text>Door Fire Ratings</Text>
+    <Description>Set the Fire Rating parameter on every door in a fire-rated wall.</Description>
+    <LongDescription>Reads each door's host wall fire rating and writes the required door rating to the door's Fire Rating instance parameter using the PDG standard mapping (e.g. 2 HR wall → 1.5 HR door). Door schedules update automatically.</LongDescription>
+    <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
+  </AddIn>
+
 </RevitAddIns>
