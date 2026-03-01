@@ -4,7 +4,7 @@
     <Name>PDG FireRatingLines</Name>
     <Assembly>PDG.Revit.FireRatingLines.dll</Assembly>
     <!-- PDG GENERATED: Fresh GUID — do not reuse from any other addin -->
-    <AddInId>3CF61E48-4162-4CF3-9322-510588A494Q</AddInId>
+    <AddInId>0503C310-E615-401C-85C6-DF3BE34AC37C</AddInId>
     <FullClassName>PDG.Revit.FireRatingLines.App</FullClassName>
     <VendorId>PDG</VendorId>
     <VendorDescription>Peake Design Group</VendorDescription>
