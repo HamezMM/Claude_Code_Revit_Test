@@ -60,20 +60,34 @@ namespace PDG.Revit.FireRatingLines
 
             // PDG: No icon — PDG.Revit.Shared IconHelper is not available in this project.
             // Add a LargeImage / Image assignment here when icons are available.
-            var buttonData = new PushButtonData(
+            var fireRatingLinesBtn = new PushButtonData(
                 name:         "FireRatingLines",
                 text:         "Fire Rating\nLines",
                 assemblyName: assemblyPath,
                 className:    "PDG.Revit.FireRatingLines.Commands.FireRatingLinesCmd")
             {
-                ToolTip = "Draw fire-rating annotation detail lines at wall centrelines in plan and section views.",
+                ToolTip = "Draw fire-rating annotation detail lines at wall centrelines in sheeted plan and section views.",
                 LongDescription =
-                    "Annotates every fire-rated wall that is cut in a plan view or visible in a section view " +
-                    "currently placed on a sheet. The line style applied matches the wall type's Fire Rating " +
-                    "parameter value (e.g. '1-HR'). Existing fire-rating lines are deleted and redrawn on each run."
+                    "Annotates every fire-rated wall visible in a sheeted plan or section view. " +
+                    "Ensures standard line styles exist (45 MIN, 1 HR, 1.5 HR, 2 HR, 3 HR, 4 HR), " +
+                    "creating any that are missing, then deletes stale lines and redraws fresh ones."
             };
 
-            panel.AddItem(buttonData);
+            var updateDoorRatingsBtn = new PushButtonData(
+                name:         "UpdateDoorFireRatings",
+                text:         "Door Fire\nRatings",
+                assemblyName: assemblyPath,
+                className:    "PDG.Revit.FireRatingLines.Commands.UpdateDoorFireRatingCmd")
+            {
+                ToolTip = "Set the Fire Rating parameter on every door in a fire-rated wall.",
+                LongDescription =
+                    "Reads each door's host wall fire rating and writes the required door rating " +
+                    "to the door's Fire Rating instance parameter using the PDG standard mapping " +
+                    "(e.g. 2 HR wall → 1.5 HR door). Updates door schedules automatically."
+            };
+
+            panel.AddItem(fireRatingLinesBtn);
+            panel.AddItem(updateDoorRatingsBtn);
         }
 
         private static RibbonPanel GetOrCreatePanel(

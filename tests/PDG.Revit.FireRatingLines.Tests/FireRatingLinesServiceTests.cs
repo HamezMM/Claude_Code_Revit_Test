@@ -12,6 +12,38 @@ namespace PDG.Revit.FireRatingLines.Tests
     public class FireRatingLinesServiceTests
     {
         // ─────────────────────────────────────────────────────────────────────
+        // Stage 0 — EnsureFireRatingLineStyles
+        // ─────────────────────────────────────────────────────────────────────
+
+        [Fact(Skip = "Requires live Revit")]
+        public void EnsureFireRatingLineStyles_ReturnsAllSixStandardStyles()
+        {
+            // Arrange: a Revit document (may or may not have existing line styles).
+            // Act: call service.EnsureFireRatingLineStyles(doc).
+            // Assert: result.Count == 6 and result contains keys
+            //   "45 MIN", "1 HR", "1.5 HR", "2 HR", "3 HR", "4 HR".
+            throw new System.NotImplementedException();
+        }
+
+        [Fact(Skip = "Requires live Revit")]
+        public void EnsureFireRatingLineStyles_CreatesLineStylesForMissingRatings()
+        {
+            // Arrange: a Revit document with none of the standard line styles present.
+            // Act: call service.EnsureFireRatingLineStyles(doc).
+            // Assert: six new OST_Lines projection subcategories are created; result.Count == 6.
+            throw new System.NotImplementedException();
+        }
+
+        [Fact(Skip = "Requires live Revit")]
+        public void EnsureFireRatingLineStyles_DoesNotDuplicateExistingStyles()
+        {
+            // Arrange: a Revit document that already has "1 HR" and "2 HR" line styles.
+            // Act: call service.EnsureFireRatingLineStyles(doc).
+            // Assert: "1 HR" and "2 HR" are NOT re-created; result still has exactly 6 entries.
+            throw new System.NotImplementedException();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         // Stage 1 — GetFireRatedWallTypes
         // ─────────────────────────────────────────────────────────────────────
 
@@ -19,7 +51,7 @@ namespace PDG.Revit.FireRatingLines.Tests
         public void GetFireRatedWallTypes_ReturnsOnlyWallTypesWithRatingParam()
         {
             // Arrange: open a Revit document containing at least one wall type with
-            // WALL_ATTR_FIRE_RATING_PARAM set (e.g. "1-HR") and one without.
+            // the Fire Rating parameter set (e.g. "1 HR") and one without.
             // Act: call service.GetFireRatedWallTypes(doc).
             // Assert: result contains only the rated type; unrated type is absent.
             throw new System.NotImplementedException();
@@ -37,9 +69,9 @@ namespace PDG.Revit.FireRatingLines.Tests
         [Fact(Skip = "Requires live Revit")]
         public void GetFireRatedWallTypes_TrimsWhitespaceFromRatingKey()
         {
-            // Arrange: a wall type with WALL_ATTR_FIRE_RATING_PARAM = " 1-HR " (padded).
+            // Arrange: a wall type with Fire Rating parameter = " 1 HR " (padded).
             // Act: call service.GetFireRatedWallTypes(doc).
-            // Assert: result key is "1-HR" (trimmed), not " 1-HR ".
+            // Assert: result key is "1 HR" (trimmed), not " 1 HR ".
             throw new System.NotImplementedException();
         }
 
@@ -50,18 +82,18 @@ namespace PDG.Revit.FireRatingLines.Tests
         [Fact(Skip = "Requires live Revit")]
         public void GetMatchingLineStyles_ReturnsMatchedProjectionStyles()
         {
-            // Arrange: document with an OST_Lines projection GraphicsStyle named "1-HR".
-            // Act: call service.GetMatchingLineStyles(doc, new[]{"1-HR"}).
-            // Assert: result["1-HR"] is not null; result["1-HR"].GraphicsStyleType == Projection.
+            // Arrange: document with an OST_Lines projection GraphicsStyle named "1 HR".
+            // Act: call service.GetMatchingLineStyles(doc, new[]{"1 HR"}).
+            // Assert: result["1 HR"] is not null; result["1 HR"].GraphicsStyleType == Projection.
             throw new System.NotImplementedException();
         }
 
         [Fact(Skip = "Requires live Revit")]
         public void GetMatchingLineStyles_IsCaseInsensitive()
         {
-            // Arrange: line style named "1-hr" (lower-case); rating key is "1-HR".
-            // Act: call service.GetMatchingLineStyles(doc, new[]{"1-HR"}).
-            // Assert: result.ContainsKey("1-HR") == true (F-11 enhanced matching).
+            // Arrange: line style named "1 hr" (lower-case); rating key is "1 HR".
+            // Act: call service.GetMatchingLineStyles(doc, new[]{"1 HR"}).
+            // Assert: result.ContainsKey("1 HR") == true (F-11 enhanced matching).
             throw new System.NotImplementedException();
         }
 
@@ -126,7 +158,7 @@ namespace PDG.Revit.FireRatingLines.Tests
         public void DrawFireRatingLines_ReturnsExpectedLineCounts()
         {
             // Arrange: a document with two fire-rated walls in one sheeted plan view,
-            // both with a matching line style, neither previously annotated.
+            // both with a matching line style (e.g. "1 HR"), neither previously annotated.
             // Act: call service.DrawFireRatingLines(doc, wallsInViews, lineStyles).
             // Assert: result.LinesDrawn == 2, result.LinesDeleted == 0.
             throw new System.NotImplementedException();
@@ -135,10 +167,10 @@ namespace PDG.Revit.FireRatingLines.Tests
         [Fact(Skip = "Requires live Revit")]
         public void DrawFireRatingLines_RecordsUnmatchedRatings()
         {
-            // Arrange: a FireRatingWall with RatingKey "2-HR" but lineStyles dictionary
-            // has no entry for "2-HR".
-            // Act: call service.DrawFireRatingLines(doc, wallsInViews, incompleteLineStyles).
-            // Assert: result.UnmatchedRatings contains "2-HR".
+            // Arrange: a FireRatingWall with RatingKey "CUSTOM" but lineStyles dictionary
+            // contains only the six standard names (none of which is "CUSTOM").
+            // Act: call service.DrawFireRatingLines(doc, wallsInViews, lineStyles).
+            // Assert: result.UnmatchedRatings contains "CUSTOM".
             throw new System.NotImplementedException();
         }
 
@@ -158,6 +190,19 @@ namespace PDG.Revit.FireRatingLines.Tests
             Assert.Equal(0, result.SkippedCurvedWalls);
             Assert.NotNull(result.UnmatchedRatings);
             Assert.Empty(result.UnmatchedRatings);
+        }
+
+        [Fact]
+        public void FireRatingStandards_HasSixStandardRatings()
+        {
+            // Verifies that the canonical list has exactly six entries in the correct order.
+            Assert.Equal(6, FireRatingStandards.StandardRatings.Length);
+            Assert.Equal("45 MIN",  FireRatingStandards.StandardRatings[0]);
+            Assert.Equal("1 HR",    FireRatingStandards.StandardRatings[1]);
+            Assert.Equal("1.5 HR",  FireRatingStandards.StandardRatings[2]);
+            Assert.Equal("2 HR",    FireRatingStandards.StandardRatings[3]);
+            Assert.Equal("3 HR",    FireRatingStandards.StandardRatings[4]);
+            Assert.Equal("4 HR",    FireRatingStandards.StandardRatings[5]);
         }
     }
 }
