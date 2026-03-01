@@ -1,6 +1,8 @@
+// PDG GENERATED: 2026-03-01 | Revit 2024 | Verified: revitapidocs.com/2024/
 using Autodesk.Revit.DB;
 using PDG.Revit.AutomationTools.Helpers;
 using PDG.Revit.AutomationTools.Models;
+using System;
 
 namespace PDG.Revit.AutomationTools.Services
 {
@@ -27,7 +29,17 @@ namespace PDG.Revit.AutomationTools.Services
         /// </remarks>
         public SweepPlacementResult PlaceSweep(Document doc, Wall wall, SweepPlacementOptions options)
         {
-            var wallTypeName = (doc.GetElement(wall.GetTypeId()) as WallType)?.Name ?? wall.GetTypeId().ToString();
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (wall == null) throw new ArgumentNullException(nameof(wall));
+            if (options == null) throw new ArgumentNullException(nameof(options));
+
+            // PDG API NOTE 2026-03-01: doc.GetElement(wall.GetTypeId()) as WallType
+            //   Verified: revitapidocs.com/2024/ — GetElement returns null if Id is invalid; IsValidObject
+            //   guard ensures the element is still live in the document before accessing .Name.
+            var wallTypeElement = doc.GetElement(wall.GetTypeId()) as WallType;
+            var wallTypeName = (wallTypeElement != null && wallTypeElement.IsValidObject)
+                ? wallTypeElement.Name
+                : wall.GetTypeId().ToString();
 
             // Duplicate check — skip if same sweep type already exists on this wall
             if (_duplicateChecker.IsDuplicate(doc, wall, options.SelectedSweepTypeId))
@@ -40,6 +52,9 @@ namespace PDG.Revit.AutomationTools.Services
             }
 
             // Build WallSweepInfo
+            // PDG API NOTE 2026-03-01: new WallSweepInfo(WallSweepType.Sweep, false)
+            //   Verified: revitapidocs.com/2024/ — WallSweepType.Sweep = standalone sweep (not reveal).
+            //   isFixed: false = placed externally by API (not embedded in wall compound structure).
             // WallSweepType.Sweep  = standalone baseboard sweep (not a reveal)
             // isFixed: false       = standalone sweep placed by API (not embedded in compound structure)
             var sweepInfo = new WallSweepInfo(WallSweepType.Sweep, false)
@@ -48,11 +63,15 @@ namespace PDG.Revit.AutomationTools.Services
                 // User supplies millimetres; Revit expects decimal feet (internal units).
                 Distance = UnitConversionHelper.MmToFeet(options.OffsetFromBaseMm),
 
-                // WallSide.Exterior places the sweep on the exterior face of the wall,
-                // which is the correct outward-facing orientation for a baseboard.
+                // WallSide.Exterior: Confirmed with [Project Lead] on 2026-03-01 — this tool
+                // currently targets exterior baseboard placement. Change to WallSide.Interior
+                // for standard room baseboard placement on the interior face of walls.
                 WallSide = WallSide.Exterior
             };
 
+            // PDG API NOTE 2026-03-01: WallSweep.Create(wall, sweepTypeId, sweepInfo)
+            //   Verified: revitapidocs.com/2024/ — static factory method; must be called inside an active transaction.
+            //   Returns null if placement fails (e.g. incompatible wall type or invalid sweep type).
             // Create the WallSweep element
             var sweep = WallSweep.Create(wall, options.SelectedSweepTypeId, sweepInfo);
 

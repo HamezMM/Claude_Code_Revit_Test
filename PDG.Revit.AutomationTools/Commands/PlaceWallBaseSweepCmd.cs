@@ -1,9 +1,10 @@
+// PDG GENERATED: 2026-03-01 | Revit 2024 | Verified: revitapidocs.com/2024/
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using PDG.Revit.AutomationTools.Services;
-using PDG.Revit.AutomationTools.ViewModels;
-using PDG.Revit.AutomationTools.Views;
+using PDG.Revit.AutomationTools.UI.ViewModels;
+using PDG.Revit.AutomationTools.UI.Windows;
 using System;
 using System.Windows.Interop;
 
@@ -16,7 +17,7 @@ namespace PDG.Revit.AutomationTools.Commands
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
-    public class PlaceWallBaseSweepCommand : IExternalCommand
+    public class PlaceWallBaseSweepCmd : IExternalCommand
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
@@ -51,7 +52,7 @@ namespace PDG.Revit.AutomationTools.Commands
 
                 // Build and show the configuration dialog
                 var viewModel = new PlaceWallBaseSweepViewModel(wallTypes, sweepTypes);
-                var dialog = new PlaceWallBaseSweepDialog(viewModel);
+                var dialog = new PlaceWallBaseSweepWindow(viewModel);
 
                 SetRevitOwner(dialog, uiApp.MainWindowHandle);
 
@@ -66,7 +67,7 @@ namespace PDG.Revit.AutomationTools.Commands
 
                 // Show results summary
                 var resultsViewModel = new ResultsSummaryViewModel(results);
-                var resultsDialog = new ResultsSummaryDialog(resultsViewModel);
+                var resultsDialog = new ResultsSummaryWindow(resultsViewModel);
 
                 SetRevitOwner(resultsDialog, uiApp.MainWindowHandle);
                 resultsDialog.ShowDialog();

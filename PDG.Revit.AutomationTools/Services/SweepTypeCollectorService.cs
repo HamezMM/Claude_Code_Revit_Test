@@ -1,5 +1,7 @@
+// PDG GENERATED: 2026-03-01 | Revit 2024 | Verified: revitapidocs.com/2024/
 using Autodesk.Revit.DB;
 using PDG.Revit.AutomationTools.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -17,9 +19,14 @@ namespace PDG.Revit.AutomationTools.Services
         /// </summary>
         public List<SweepTypeSummary> GetSweepTypes(Document doc)
         {
-            // Wall sweep profile types live in the OST_Cornices built-in category.
-            // Using WhereElementIsElementType() limits results to type definitions,
-            // excluding any placed instances.
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+
+            // PDG API NOTE 2026-03-01: FilteredElementCollector.OfCategory(OST_Cornices)
+            //   Verified: revitapidocs.com/2024/ — WallSweepType in the Revit 2024 API is an enum
+            //   (Sweep/Reveal), NOT a class usable with OfClass(). Wall sweep profile type definitions
+            //   are stored under BuiltInCategory.OST_Cornices. OfCategory(OST_Cornices) is therefore
+            //   the correct and only reliable filter for wall sweep profile types in Revit 2024.
+            //   OfClass(typeof(WallSweepType)) would fail because WallSweepType is not an Element subclass.
             return new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_Cornices)
                 .WhereElementIsElementType()
