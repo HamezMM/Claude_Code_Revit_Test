@@ -14,13 +14,13 @@ namespace PDG.Revit.FireRatingLines.Commands
 {
     /// <summary>
     /// IExternalCommand entry point for the Fire Rating Lines tool.
-    /// Orchestrates the four service stages and presents a TaskDialog summary.
+    /// Orchestrates all service stages (walls + floors/ceilings/roofs) and shows a TaskDialog.
     /// No business logic or transaction management lives here — see FireRatingLinesService.
     /// </summary>
     // PDG API NOTE 2026-03-01: [Transaction(TransactionMode.Manual)]
     //   Verified: revitapidocs.com/2024/ — required; the service manages its own TransactionGroup.
     // PDG API NOTE 2026-03-01: [Regeneration(RegenerationOption.Manual)]
-    //   Verified: revitapidocs.com/2024/ — suppress automatic document regeneration between API calls.
+    //   Verified: revitapidocs.com/2024/ — suppresses automatic document regeneration.
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
     public class FireRatingLinesCmd : IExternalCommand
@@ -32,7 +32,7 @@ namespace PDG.Revit.FireRatingLines.Commands
         {
             try
             {
-                // ── Guard: require an open document ──────────────────────────
+                // ── Guard: require an open document ──────────────────────────────
                 var doc = commandData.Application.ActiveUIDocument?.Document;
                 if (doc == null)
                 {
@@ -44,49 +44,61 @@ namespace PDG.Revit.FireRatingLines.Commands
 
                 var service = new FireRatingLinesService();
 
-                // ── Stage 1: Discover fire-rated wall types ───────────────────
+                // ── Stage 1: Discover fire-rated wall types ───────────────────────
                 // Returns Dictionary<long wallTypeId, string ratingKey> for ALL rated types.
                 var wallTypeIdToRating = service.GetFireRatedWallTypes(doc);
 
-                // F-10 guard: exit cleanly with guidance if no fire-rated types found.
-                if (wallTypeIdToRating.Count == 0)
+                // ── Stage A: Discover fire-rated floor/ceiling/roof types ─────────
+                // Returns Dictionary<long typeId, string ratingKey> for ALL rated types.
+                var horzTypeIdToRating = service.GetFireRatedHorizontalTypes(doc);
+
+                // ── F-10 guard: exit cleanly if nothing is rated in this document ──
+                if (wallTypeIdToRating.Count == 0 && horzTypeIdToRating.Count == 0)
                 {
                     TaskDialog.Show(
                         "PDG: Fire Rating Lines",
-                        "No fire-rated wall types were found in this document.\n\n" +
-                        "To use this tool, assign a Fire Rating value to one or more wall types:\n" +
-                        "  Manage tab → Settings → Object Styles (or edit the wall type directly)\n" +
-                        "  Set the 'Fire Rating' parameter to a value matching a line style name (e.g. '1-HR').");
+                        "No fire-rated wall, floor, ceiling, or roof types were found in this document.\n\n" +
+                        "To use this tool, set the 'Fire Rating' parameter on one or more element types " +
+                        "to a value that matches a line style name (e.g. '1-HR'), then rerun.");
                     return Result.Succeeded;
                 }
 
-                // Extract unique rating keys for Stage 2.
-                var uniqueRatingKeys = wallTypeIdToRating.Values
+                // ── Stage 2: Resolve line styles — combine keys from all element types ──
+                var allRatingKeys = wallTypeIdToRating.Values
+                    .Concat(horzTypeIdToRating.Values)
                     .Distinct(StringComparer.OrdinalIgnoreCase);
+                var lineStyles = service.GetMatchingLineStyles(doc, allRatingKeys);
 
-                // ── Stage 2: Resolve matching line styles ─────────────────────
-                var lineStyles = service.GetMatchingLineStyles(doc, uniqueRatingKeys);
-
-                // ── Stage 3: Collect walls in sheeted views ───────────────────
+                // ── Stage 3: Collect fire-rated walls in sheeted plan + section views ─
                 var wallsInViews = service.GetFireRatedWallsInViews(doc, wallTypeIdToRating);
 
-                // ── Stage 4: Delete old lines + draw new lines ────────────────
-                var result = service.DrawFireRatingLines(doc, wallsInViews, lineStyles);
+                // ── Stage B: Collect fire-rated floors/ceilings/roofs in sheeted sections ─
+                var horizontalInViews = service.GetFireRatedHorizontalElementsInSectionViews(
+                    doc, horzTypeIdToRating, out int skippedSlopedRoofs);
 
-                // ── F-09: TaskDialog summary ──────────────────────────────────
+                // ── Stage 4: Delete old lines + draw new lines (single TransactionGroup) ─
+                var result = service.DrawFireRatingLines(
+                    doc, wallsInViews, horizontalInViews, lineStyles, skippedSlopedRoofs);
+
+                // ── TaskDialog summary ────────────────────────────────────────────
                 var sb = new StringBuilder();
-                sb.AppendLine($"Lines drawn:     {result.LinesDrawn}");
-                sb.AppendLine($"Lines deleted:   {result.LinesDeleted}");
-                sb.AppendLine($"Walls processed: {result.WallsProcessed}");
+                sb.AppendLine($"Wall lines drawn:         {result.LinesDrawn}");
+                sb.AppendLine($"Horizontal lines drawn:   {result.HorizontalLinesDrawn}");
+                sb.AppendLine($"Lines deleted:            {result.LinesDeleted}");
+                sb.AppendLine($"Walls processed:          {result.WallsProcessed}");
+                sb.AppendLine($"H-elements processed:     {result.HorizontalElementsProcessed}");
 
                 if (result.SkippedCurvedWalls > 0)
                     sb.AppendLine($"Curved walls skipped (v1 — straight walls only): {result.SkippedCurvedWalls}");
 
+                if (result.SkippedSlopedRoofs > 0)
+                    sb.AppendLine($"Sloped roofs skipped (v1 — flat roofs only): {result.SkippedSlopedRoofs}");
+
                 if (result.UnmatchedRatings.Count > 0)
                 {
                     sb.AppendLine();
-                    sb.AppendLine("WARNING: No matching line style found for the following fire ratings.");
-                    sb.AppendLine("Create a line style with an exact matching name (e.g. '1-HR') and rerun.");
+                    sb.AppendLine("WARNING: No matching line style for the following fire ratings.");
+                    sb.AppendLine("Create a line style with an exactly matching name and rerun.");
                     sb.AppendLine($"  Unmatched: {string.Join(", ", result.UnmatchedRatings)}");
                 }
 
