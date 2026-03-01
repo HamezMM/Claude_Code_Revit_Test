@@ -1,0 +1,87 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ── Core properties ──────────────────────────────────────────────── -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>false</UseWPF>
+    <AssemblyName>PDG.Revit.FireRatingLines</AssemblyName>
+    <RootNamespace>PDG.Revit.FireRatingLines</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>9.0</LangVersion>
+
+    <!--
+      Revit is a 64-bit host process. The addin DLL must also target x64.
+    -->
+    <PlatformTarget>x64</PlatformTarget>
+
+    <!--
+      Remove the \net48 suffix from the output path so the DLL lands in
+      bin\Debug\ and bin\Release\ — consistent with post-build deploy paths.
+    -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <!-- ── Debug configuration ──────────────────────────────────────────── -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
+  <!-- ── Release configuration ────────────────────────────────────────── -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <DebugType>pdbonly</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <!-- ── Revit API references ─────────────────────────────────────────── -->
+  <!--
+    RevitInstallPath and RevitAddinsFolder are defined in Directory.Build.props
+    at the repo root. Do not hardcode paths here.
+    Private=False prevents the Revit DLLs from being copied to the output
+    folder — they are loaded from Revit's install directory at runtime.
+  -->
+  <ItemGroup>
+    <Reference Include="RevitAPI">
+      <HintPath>$(RevitInstallPath)\RevitAPI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitInstallPath)\RevitAPIUI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- ── Post-build: deploy to Revit addins folder (Debug only) ───────── -->
+  <!--
+    On each successful Debug build, the compiled DLL and .addin manifest are
+    copied to the per-user Revit addins folder so they are picked up
+    automatically when Revit launches.
+  -->
+  <Target Name="DeployToRevitAddins" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'">
+    <Message Text="――― PDG Deploy ――― Copying to: $(RevitAddinsFolder)" Importance="high" />
+
+    <MakeDir Directories="$(RevitAddinsFolder)" Condition="!Exists('$(RevitAddinsFolder)')" />
+
+    <!-- Copy the compiled DLL -->
+    <Copy
+      SourceFiles="$(TargetPath)"
+      DestinationFolder="$(RevitAddinsFolder)"
+      SkipUnchangedFiles="true" />
+
+    <!-- Copy the .addin manifest so Revit discovers the assembly -->
+    <Copy
+      SourceFiles="$(MSBuildProjectDirectory)\manifests\2024\PDG.FireRatingLines.addin"
+      DestinationFolder="$(RevitAddinsFolder)"
+      SkipUnchangedFiles="true" />
+
+    <Message Text="――― PDG Deploy ――― Done." Importance="high" />
+  </Target>
+
+</Project>
