@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PDG.Revit.FireRatingLines\PDG.Revit.FireRatingLines.csproj" />
+    <ProjectReference Include="..\..\PDG.Revit.FireRatingLines\PDG.Revit.FireRatingLines.csproj" />
   </ItemGroup>
 
 </Project>

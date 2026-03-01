@@ -1,5 +1,5 @@
 <Window
-    x:Class="PDG.Revit.AutomationTools.Views.ResultsSummaryDialog"
+    x:Class="PDG.Revit.AutomationTools.UI.Windows.ResultsSummaryWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PDG Tools — Wall Base Sweep Results"

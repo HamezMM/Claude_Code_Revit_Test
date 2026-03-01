@@ -17,7 +17,7 @@
     <Name>PDG Place Wall Base Sweep</Name>
     <Assembly>PDG.Revit.AutomationTools.dll</Assembly>
     <AddInId>C4F8A2E6-7B3D-4C1A-9E5F-2D8B6A4C0E7F</AddInId>
-    <FullClassName>PDG.Revit.AutomationTools.Commands.PlaceWallBaseSweepCommand</FullClassName>
+    <FullClassName>PDG.Revit.AutomationTools.Commands.PlaceWallBaseSweepCmd</FullClassName>
     <VendorId>PDG</VendorId>
     <VendorDescription>Peake Design Group</VendorDescription>
     <Text>Place Wall Base Sweep</Text>

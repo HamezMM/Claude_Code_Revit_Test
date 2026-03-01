@@ -1,5 +1,7 @@
+// PDG GENERATED: 2026-03-01 | Revit 2024 | Verified: revitapidocs.com/2024/
 using Autodesk.Revit.DB;
 using PDG.Revit.AutomationTools.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -16,6 +18,11 @@ namespace PDG.Revit.AutomationTools.Services
         /// </summary>
         public List<WallTypeSummary> GetWallTypes(Document doc)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+
+            // PDG API NOTE 2026-03-01: FilteredElementCollector(doc).OfClass(typeof(WallType))
+            //   Verified: revitapidocs.com/2024/ — OfClass(WallType) returns all wall type elements.
+            //   WhereElementIsElementType() not used here as OfClass(WallType) is already type-scoped.
             return new FilteredElementCollector(doc)
                 .OfClass(typeof(WallType))
                 .Cast<WallType>()

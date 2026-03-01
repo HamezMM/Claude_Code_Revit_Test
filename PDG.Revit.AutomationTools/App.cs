@@ -1,3 +1,4 @@
+// PDG GENERATED: 2026-03-01 | Revit 2024 | Verified: revitapidocs.com/2024/
 using Autodesk.Revit.UI;
 using System;
 using System.Reflection;
@@ -52,7 +53,7 @@ namespace PDG.Revit.AutomationTools
                 name: "PlaceWallBaseSweep",
                 text: "Wall Base\nSweep",
                 assemblyName: assemblyPath,
-                className: "PDG.Revit.AutomationTools.Commands.PlaceWallBaseSweepCommand")
+                className: "PDG.Revit.AutomationTools.Commands.PlaceWallBaseSweepCmd")
             {
                 ToolTip = "Automatically place baseboard wall sweeps at the base of selected wall types.",
                 LongDescription =

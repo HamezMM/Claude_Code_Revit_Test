@@ -5,7 +5,6 @@ using Autodesk.Revit.DB;
 using PDG.Revit.FireRatingLines.Models;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 namespace PDG.Revit.FireRatingLines.Services
@@ -34,12 +33,16 @@ namespace PDG.Revit.FireRatingLines.Services
         /// </summary>
         // PDG API NOTE 2026-03-01: FilteredElementCollector.OfClass(typeof(WallType)).WhereElementIsElementType()
         //   Verified: revitapidocs.com/2024/ — returns WallType elements only.
-        // PDG API NOTE 2026-03-01: Parameter.AsString() on WALL_ATTR_FIRE_RATING_PARAM
-        //   StorageType = String. Returns null if unset. Check null AND empty.
+        // PDG API NOTE 2026-03-01: WallType.LookupParameter("Fire Rating")
+        //   Verified: revitapidocs.com/2024/ — BuiltInParameter.WALL_ATTR_FIRE_RATING_PARAM does not
+        //   exist in the Revit 2024 API. The Fire Rating type parameter must be accessed via
+        //   LookupParameter("Fire Rating"). StorageType.String guard is required before AsString().
         // PDG API NOTE 2026-03-01: ElementId.Value (Int64)
         //   Use .Value throughout. Never deprecated .IntegerValue.
         public Dictionary<long, string> GetFireRatedWallTypes(Document doc)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+
             var result = new Dictionary<long, string>();
 
             var wallTypes = new FilteredElementCollector(doc)
@@ -49,8 +52,9 @@ namespace PDG.Revit.FireRatingLines.Services
 
             foreach (var wt in wallTypes)
             {
-                var param = wt.get_Parameter(BuiltInParameter.WALL_ATTR_FIRE_RATING_PARAM);
-                if (param == null) continue;
+                // PDG API NOTE 2026-03-01: Verified against revitapidocs.com/2024/
+                var param = wt.LookupParameter("Fire Rating");
+                if (param == null || param.StorageType != StorageType.String) continue;
 
                 var ratingValue = param.AsString();
                 if (string.IsNullOrWhiteSpace(ratingValue)) continue;
@@ -82,13 +86,16 @@ namespace PDG.Revit.FireRatingLines.Services
             Document doc,
             IEnumerable<string> ratingKeys)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (ratingKeys == null) throw new ArgumentNullException(nameof(ratingKeys));
+
             var result = new Dictionary<string, GraphicsStyle>(StringComparer.OrdinalIgnoreCase);
 
             // Get the ElementId of the OST_Lines drafting category.
             var ostLinesCategory = Category.GetCategory(doc, BuiltInCategory.OST_Lines);
             if (ostLinesCategory == null)
             {
-                Trace.TraceWarning("PDG FireRatingLines: OST_Lines category not found in document.");
+                PDGLogger.Warning("PDG FireRatingLines: OST_Lines category not found in document.");
                 return result;
             }
             long ostLinesId = ostLinesCategory.Id.Value;
@@ -123,7 +130,7 @@ namespace PDG.Revit.FireRatingLines.Services
                 if (match != null)
                     result[key] = match;
                 else
-                    Trace.TraceWarning($"PDG FireRatingLines: No line style found for rating '{key}'.");
+                    PDGLogger.Warning($"PDG FireRatingLines: No line style found for rating '{key}'.");
             }
 
             return result;
@@ -156,6 +163,9 @@ namespace PDG.Revit.FireRatingLines.Services
             Document doc,
             Dictionary<long, string> wallTypeIdToRating)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (wallTypeIdToRating == null) throw new ArgumentNullException(nameof(wallTypeIdToRating));
+
             var result = new List<FireRatingWall>();
             // Dedup key: (wallId, viewId) — prevents duplicate annotation when the same
             // view is placed on more than one sheet.
@@ -213,7 +223,7 @@ namespace PDG.Revit.FireRatingLines.Services
                     // Curved-wall guard: skip Arc-based walls in v1.
                     if (wall.Location is LocationCurve locCurve && !(locCurve.Curve is Line))
                     {
-                        Trace.TraceInformation(
+                        PDGLogger.Info(
                             $"PDG FireRatingLines: Skipping curved wall Id={wall.Id.Value} " +
                             $"in view Id={view.Id.Value} (Arc-based — v1 limitation).");
                         continue;
@@ -250,6 +260,10 @@ namespace PDG.Revit.FireRatingLines.Services
             List<FireRatingWall> wallsInViews,
             Dictionary<string, GraphicsStyle> lineStyles)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (wallsInViews == null) throw new ArgumentNullException(nameof(wallsInViews));
+            if (lineStyles == null) throw new ArgumentNullException(nameof(lineStyles));
+
             var result = new FireRatingLinesResult();
 
             // Record which rating keys have no matching line style.
@@ -293,7 +307,7 @@ namespace PDG.Revit.FireRatingLines.Services
 
                         var wall = doc.GetElement(fw.WallId) as Wall;
                         var view = doc.GetElement(fw.ViewId) as View;
-                        if (wall == null || view == null) continue;
+                        if (wall == null || !wall.IsValidObject || view == null || !view.IsValidObject) continue;
 
                         // Curved-wall guard (defensive second check).
                         if (!(wall.Location is LocationCurve locCurve) || !(locCurve.Curve is Line line3d))
@@ -316,7 +330,7 @@ namespace PDG.Revit.FireRatingLines.Services
                         }
                         catch (Exception ex)
                         {
-                            Trace.TraceWarning(
+                            PDGLogger.Warning(
                                 $"PDG FireRatingLines: NewDetailCurve failed for wall " +
                                 $"Id={fw.WallId.Value} in view Id={fw.ViewId.Value}. {ex.Message}");
                         }
@@ -374,7 +388,7 @@ namespace PDG.Revit.FireRatingLines.Services
                     }
                     catch (Exception ex)
                     {
-                        Trace.TraceWarning(
+                        PDGLogger.Warning(
                             $"PDG FireRatingLines: Could not delete detail line Id={id.Value}. {ex.Message}");
                     }
                 }
@@ -405,7 +419,7 @@ namespace PDG.Revit.FireRatingLines.Services
 
             if (flatStart.DistanceTo(flatEnd) < 1e-6)
             {
-                Trace.TraceWarning("PDG FireRatingLines: Degenerate (zero-length) plan curve — skipped.");
+                PDGLogger.Warning("PDG FireRatingLines: Degenerate (zero-length) plan curve — skipped.");
                 return null;
             }
 
@@ -431,7 +445,7 @@ namespace PDG.Revit.FireRatingLines.Services
             var bbox = wall.get_BoundingBox(view);
             if (bbox == null)
             {
-                Trace.TraceWarning(
+                PDGLogger.Warning(
                     $"PDG FireRatingLines: No bounding box for wall Id={wall.Id.Value} " +
                     $"in section view Id={view.Id.Value} — skipped.");
                 return null;
@@ -446,7 +460,7 @@ namespace PDG.Revit.FireRatingLines.Services
 
             if (localBottom.DistanceTo(localTop) < 1e-6)
             {
-                Trace.TraceWarning(
+                PDGLogger.Warning(
                     $"PDG FireRatingLines: Degenerate section curve for wall Id={wall.Id.Value} — skipped.");
                 return null;
             }

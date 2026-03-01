@@ -1,3 +1,4 @@
+// PDG GENERATED: 2026-03-01 | Revit 2024 | Verified: revitapidocs.com/2024/
 using Autodesk.Revit.DB;
 using PDG.Revit.AutomationTools.Models;
 using System;
@@ -8,7 +9,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
-namespace PDG.Revit.AutomationTools.ViewModels
+namespace PDG.Revit.AutomationTools.UI.ViewModels
 {
     /// <summary>
     /// ViewModel for the Wall Base Sweep configuration dialog.
@@ -119,12 +120,18 @@ namespace PDG.Revit.AutomationTools.ViewModels
 
         // ── Command handlers ──────────────────────────────────────────────────
 
+        /// <summary>
+        /// Confirms the dialog with a positive result and raises <see cref="RequestClose"/>.
+        /// </summary>
         private void OnPlace()
         {
             DialogResult = true;
             RequestClose?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>
+        /// Cancels the dialog without placing sweeps and raises <see cref="RequestClose"/>.
+        /// </summary>
         private void OnCancel()
         {
             DialogResult = false;
@@ -137,6 +144,10 @@ namespace PDG.Revit.AutomationTools.ViewModels
         /// Assembles a <see cref="SweepPlacementOptions"/> from the current dialog state.
         /// Call only after confirming <see cref="IsValid"/> is true.
         /// </summary>
+        /// <returns>
+        /// A fully populated <see cref="SweepPlacementOptions"/> reflecting the user's
+        /// selected wall types, sweep profile type, offset, and placement scope.
+        /// </returns>
         public SweepPlacementOptions BuildOptions()
         {
             double.TryParse(OffsetText, out var offsetMm);
