@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RevitAddIns>
+
+  <!-- Application: loads on Revit startup, registers the PDG Tools ribbon tab -->
   <AddIn Type="Application">
     <Name>PDG AutomationTools</Name>
     <Assembly>PDG.Revit.AutomationTools.dll</Assembly>
@@ -8,4 +10,20 @@
     <VendorId>PDG</VendorId>
     <VendorDescription>Peake Design Group</VendorDescription>
   </AddIn>
+
+  <!-- Command: registers the command so Revit can resolve it from the ribbon
+       button and expose it in the Keyboard Shortcuts dialog -->
+  <AddIn Type="Command">
+    <Name>PDG Place Wall Base Sweep</Name>
+    <Assembly>PDG.Revit.AutomationTools.dll</Assembly>
+    <AddInId>C4F8A2E6-7B3D-4C1A-9E5F-2D8B6A4C0E7F</AddInId>
+    <FullClassName>PDG.Revit.AutomationTools.Commands.PlaceWallBaseSweepCommand</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+    <Text>Place Wall Base Sweep</Text>
+    <Description>Automatically places baseboard wall sweeps at the base of selected wall types.</Description>
+    <LongDescription>Opens the Wall Base Sweep dialog to configure target wall types, sweep profile, base offset, and scope before placing WallSweep elements on wall instances.</LongDescription>
+    <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
+  </AddIn>
+
 </RevitAddIns>
