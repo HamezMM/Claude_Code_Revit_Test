@@ -7,6 +7,20 @@
     Assembly:  GridBuilderAddin.dll
   -->
 
+  <!--
+    Application: loads on Revit startup, registers the PDG Tools ribbon tab
+    and adds the Grid Builder button to the Structural panel.
+  -->
+  <AddIn Type="Application">
+    <Name>Grid Builder App</Name>
+    <Assembly>GridBuilderAddin.dll</Assembly>
+    <!-- Fresh GUID — do not reuse from any other addin -->
+    <AddInId>B4E8F3A2-9D5C-4B6E-8F7A-2C4D6E8F0B1C</AddInId>
+    <FullClassName>GridBuilderAddin.App</FullClassName>
+    <VendorId>GridBuilderAddin</VendorId>
+    <VendorDescription>Grid Builder Addin</VendorDescription>
+  </AddIn>
+
   <!-- Command: registers the Grid Builder command so Revit can resolve it from
        the ribbon button and expose it in the Keyboard Shortcuts dialog -->
   <AddIn Type="Command">

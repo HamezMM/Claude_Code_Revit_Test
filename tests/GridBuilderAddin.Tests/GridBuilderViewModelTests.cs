@@ -5,6 +5,7 @@
 // so these tests run safely in the xUnit host.
 using GridBuilderAddin;
 using GridBuilderAddin.UI;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -12,7 +13,8 @@ namespace GridBuilderAddin.Tests
 {
     /// <summary>
     /// Verifies <see cref="GridBuilderViewModel"/> validation rules,
-    /// spacing row collection management, and <see cref="GridBuilderViewModel.BuildConfig"/>.
+    /// spacing row collection management, unit-mode switching, and
+    /// <see cref="GridBuilderViewModel.BuildConfig"/>.
     /// </summary>
     public class GridBuilderViewModelTests
     {
@@ -60,6 +62,15 @@ namespace GridBuilderAddin.Tests
             var vm = new GridBuilderViewModel();
             foreach (var row in vm.YSpacingRows)
                 Assert.Equal(GridBuilderConstants.DefaultSpacingMm, row.ValueMm);
+        }
+
+        [Fact]
+        public void Constructor_DefaultUnitMode_IsMillimeters()
+        {
+            var vm = new GridBuilderViewModel();
+            Assert.Equal(GridUnitMode.Millimeters, vm.UnitMode);
+            Assert.True(vm.IsMmMode);
+            Assert.False(vm.IsFtInMode);
         }
 
         // ── X/Y count validation ─────────────────────────────────────────────
@@ -209,6 +220,151 @@ namespace GridBuilderAddin.Tests
             Assert.Contains("C", vm.YSpacingRows[1].Label);
         }
 
+        // ── Unit mode switching ───────────────────────────────────────────────
+
+        [Fact]
+        public void UnitMode_Switch_ToFtIn_UpdatesIsFtInMode()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            Assert.True(vm.IsFtInMode);
+            Assert.False(vm.IsMmMode);
+        }
+
+        [Fact]
+        public void UnitMode_Switch_ToFtIn_PropagatesUnitModeToAllRows()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            Assert.All(vm.XSpacingRows, r => Assert.Equal(GridUnitMode.FeetAndInches, r.UnitMode));
+            Assert.All(vm.YSpacingRows, r => Assert.Equal(GridUnitMode.FeetAndInches, r.UnitMode));
+        }
+
+        [Fact]
+        public void UnitMode_Switch_ToFtIn_RowsRemainValid()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            Assert.All(vm.XSpacingRows, r => Assert.True(r.IsValid));
+            Assert.All(vm.YSpacingRows, r => Assert.True(r.IsValid));
+        }
+
+        [Fact]
+        public void UnitMode_Switch_BackToMm_RowsRemainValid()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            vm.UnitMode = GridUnitMode.Millimeters;
+            Assert.All(vm.XSpacingRows, r => Assert.True(r.IsValid));
+            Assert.All(vm.YSpacingRows, r => Assert.True(r.IsValid));
+        }
+
+        [Fact]
+        public void UnitMode_Switch_ToFtIn_DefaultSpacingLabel_Changes()
+        {
+            var vm = new GridBuilderViewModel();
+            Assert.Contains("mm", vm.DefaultSpacingLabel);
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            Assert.DoesNotContain("mm", vm.DefaultSpacingLabel);
+        }
+
+        [Fact]
+        public void UnitMode_Switch_ToFtIn_SpacingUnitLabel_Changes()
+        {
+            var vm = new GridBuilderViewModel();
+            Assert.Contains("mm", vm.SpacingUnitLabel);
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            Assert.Contains("ft-in", vm.SpacingUnitLabel);
+        }
+
+        [Fact]
+        public void UnitMode_Switch_ToFtIn_XSpacingHeading_ChangesDynamically()
+        {
+            var vm = new GridBuilderViewModel();
+            var mmHeading = vm.XSpacingHeading;
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            Assert.NotEqual(mmHeading, vm.XSpacingHeading);
+            Assert.Contains("ft-in", vm.XSpacingHeading);
+        }
+
+        [Fact]
+        public void UnitMode_Switch_ConvertsMmToFtIn_PreservesRoundtripValue()
+        {
+            var vm = new GridBuilderViewModel();
+            // Default is 8000 mm; after switch to ft-in, ValueMm should still be 8000 (approximately)
+            var originalMm = vm.XSpacingRows[0].ValueMm;
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            Assert.Equal(originalMm, vm.XSpacingRows[0].ValueMm, precision: 0);
+        }
+
+        [Fact]
+        public void IsMmMode_Setter_True_SetsUnitModeToMillimeters()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.IsFtInMode = true;
+            Assert.Equal(GridUnitMode.FeetAndInches, vm.UnitMode);
+            vm.IsMmMode = true;
+            Assert.Equal(GridUnitMode.Millimeters, vm.UnitMode);
+        }
+
+        [Fact]
+        public void IsFtInMode_Setter_True_SetsUnitModeToFeetAndInches()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.IsFtInMode = true;
+            Assert.Equal(GridUnitMode.FeetAndInches, vm.UnitMode);
+        }
+
+        [Fact]
+        public void UnitMode_Switch_RaisesPropertyChanged_ForRelatedProperties()
+        {
+            var vm          = new GridBuilderViewModel();
+            var raisedNames = new List<string?>();
+            vm.PropertyChanged += (_, e) => raisedNames.Add(e.PropertyName);
+
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+
+            Assert.Contains(nameof(vm.UnitMode),          raisedNames);
+            Assert.Contains(nameof(vm.IsMmMode),          raisedNames);
+            Assert.Contains(nameof(vm.IsFtInMode),        raisedNames);
+            Assert.Contains(nameof(vm.SpacingUnitLabel),  raisedNames);
+            Assert.Contains(nameof(vm.XSpacingHeading),   raisedNames);
+            Assert.Contains(nameof(vm.YSpacingHeading),   raisedNames);
+            Assert.Contains(nameof(vm.DefaultSpacingLabel), raisedNames);
+        }
+
+        // ── Default spacing ft-in validation ──────────────────────────────────
+
+        [Fact]
+        public void IsValid_False_WhenInFtInMode_And_DefaultFeetAndInches_AreZero()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            vm.DefaultFeetText   = "0";
+            vm.DefaultInchesText = "0";
+            Assert.False(vm.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_True_WhenInFtInMode_And_DefaultSpacingIsValid()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            vm.DefaultFeetText   = "26";
+            vm.DefaultInchesText = "3";
+            Assert.True(vm.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_False_WhenInFtInMode_And_DefaultInchesIs12OrMore()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            vm.DefaultFeetText   = "1";
+            vm.DefaultInchesText = "12";
+            Assert.False(vm.IsValid);
+        }
+
         // ── BuildConfig ───────────────────────────────────────────────────────
 
         [Fact]
@@ -264,6 +420,31 @@ namespace GridBuilderAddin.Tests
             // here count stays the same so existing rows keep their pre-filled values.
             var config = vm.BuildConfig();
             Assert.Equal(7500.0, config.DefaultSpacingMm);
+        }
+
+        [Fact]
+        public void BuildConfig_InFtInMode_XSpacingsMm_AreInMillimetres()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+
+            // All rows converted from 8000 mm → should be approximately 8000 mm back
+            var config = vm.BuildConfig();
+            foreach (var spacingMm in config.XSpacingsMm)
+                Assert.True(spacingMm > 0, "All spacings must be positive mm values");
+        }
+
+        [Fact]
+        public void BuildConfig_InFtInMode_DefaultSpacingMm_IsInMillimetres()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode          = GridUnitMode.FeetAndInches;
+            vm.DefaultFeetText   = "1";
+            vm.DefaultInchesText = "0";
+
+            var config = vm.BuildConfig();
+            // 1 ft 0 in = 304.8 mm
+            Assert.Equal(304.8, config.DefaultSpacingMm, precision: 4);
         }
 
         // ── INotifyPropertyChanged ────────────────────────────────────────────

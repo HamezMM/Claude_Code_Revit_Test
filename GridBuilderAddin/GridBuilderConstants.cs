@@ -23,6 +23,18 @@ namespace GridBuilderAddin
         /// <summary>Default grid spacing in millimetres applied to all intervals at startup.</summary>
         public const double DefaultSpacingMm = 8000.0;
 
+        /// <summary>
+        /// Default spacing in whole feet when the unit mode is Feet &amp; Inches.
+        /// 8000 mm ≈ 26 ft 3 in.
+        /// </summary>
+        public const int DefaultFeet = 26;
+
+        /// <summary>
+        /// Default spacing in decimal inches when the unit mode is Feet &amp; Inches.
+        /// Combined with <see cref="DefaultFeet"/> this gives ≈ 8000 mm.
+        /// </summary>
+        public const double DefaultInches = 3.0;
+
         // ── Grid extent ─────────────────────────────────────────────────────
 
         /// <summary>
