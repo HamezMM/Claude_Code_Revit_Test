@@ -54,15 +54,6 @@
             <Setter Property="HorizontalContentAlignment" Value="Right"/>
         </Style>
 
-        <!-- ── Text box with red border on invalid ──────────────────────── -->
-        <Style x:Key="ValidatedTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsValid, RelativeSource={RelativeSource Self}}" Value="False">
-                    <!-- IsValid on TextBox is always true; row-level validation handled via DataTrigger on SpacingIntervalRow -->
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
         <!-- ── Text box for spacing rows — red border when row is invalid ─ -->
         <Style x:Key="SpacingTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Style.Triggers>

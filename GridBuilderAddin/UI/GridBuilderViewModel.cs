@@ -20,7 +20,7 @@ namespace GridBuilderAddin.UI
     /// </summary>
     public class SpacingIntervalRow : INotifyPropertyChanged
     {
-        private string _spacingText;
+        private string _spacingText = string.Empty;
 
         /// <summary>Human-readable label shown to the left of the text box, e.g. "1 → 2" or "A → B".</summary>
         public string Label { get; }
@@ -51,9 +51,11 @@ namespace GridBuilderAddin.UI
         public double ValueMm => double.TryParse(SpacingText, out var v) ? v : 0;
 
         /// <summary>Initialises the row with the given label and pre-fills the spacing text.</summary>
+        /// <param name="label">Human-readable interval label (e.g. "1 → 2"). Must not be null.</param>
+        /// <param name="defaultSpacingMm">Initial spacing value in millimetres.</param>
         public SpacingIntervalRow(string label, double defaultSpacingMm)
         {
-            Label = label;
+            Label        = label ?? throw new ArgumentNullException(nameof(label));
             _spacingText = defaultSpacingMm.ToString("0.##");
         }
 
