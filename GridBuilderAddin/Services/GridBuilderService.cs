@@ -27,7 +27,23 @@ namespace GridBuilderAddin.Services
     /// </summary>
     public class GridBuilderService
     {
-        // ── Public entry point ───────────────────────────────────────────────
+        // ── Public entry points ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Creates all X-axis and Y-axis grid lines and returns the <see cref="ElementId"/>
+        /// of every created grid element. Returns <c>null</c> on error (error already shown).
+        /// Use this overload when the caller needs to track created IDs (e.g. for Back navigation).
+        /// </summary>
+        public List<ElementId>? CreateGridWithIds(Document doc, GridConfig config)
+        {
+            if (doc    == null) throw new ArgumentNullException(nameof(doc));
+            if (config == null) throw new ArgumentNullException(nameof(config));
+
+            // Re-use the same core logic; collect IDs via the out-list variant
+            var createdIds = new List<ElementId>();
+            bool ok = CreateGridCore(doc, config, createdIds);
+            return ok ? createdIds : null;
+        }
 
         /// <summary>
         /// Creates all X-axis (numerical) and Y-axis (alphabetical) grid lines described
@@ -48,6 +64,46 @@ namespace GridBuilderAddin.Services
         {
             if (doc    == null) throw new ArgumentNullException(nameof(doc));
             if (config == null) throw new ArgumentNullException(nameof(config));
+            return CreateGridCore(doc, config, null);
+        }
+
+        /// <summary>
+        /// Deletes the specified elements in a single transaction.
+        /// Used for Back-navigation cleanup (e.g. deleting grids before re-entering the Grid Builder).
+        /// Silently skips IDs that are no longer valid.
+        /// </summary>
+        public bool DeleteElements(Document doc, IEnumerable<ElementId> ids)
+        {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            var idList = ids?.ToList() ?? new List<ElementId>();
+            if (!idList.Any()) return true;
+
+            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
+            var transaction = new Transaction(doc, "Delete Elements (Back Navigation)");
+            try
+            {
+                transaction.Start();
+                foreach (var id in idList)
+                {
+                    try { doc.Delete(id); }
+                    catch { /* element may have already been deleted */ }
+                }
+                transaction.Commit();
+                Debug.WriteLine($"[GridBuilder] Deleted {idList.Count} element(s) for back navigation.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[GridBuilder] DeleteElements exception: {ex.Message}");
+                if (transaction.HasStarted() && !transaction.HasEnded()) transaction.RollBack();
+                return false;
+            }
+        }
+
+        // ── Core grid creation ────────────────────────────────────────────────
+
+        private bool CreateGridCore(Document doc, GridConfig config, List<ElementId>? createdIds)
+        {
 
             Debug.WriteLine($"[GridBuilder] CreateGrid called — XCount={config.XCount}, YCount={config.YCount}");
 
@@ -135,6 +191,7 @@ namespace GridBuilderAddin.Services
                     // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
                     // Grid.Create(Document, Line) — revitapidocs.com/2024/8a44a4e5-eecc-1b26-b0a2-3f9f4fe24062.htm
                     var grid = Grid.Create(doc, line);
+                    createdIds?.Add(grid.Id);
 
                     // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
                     // Grid.Name (property setter) — revitapidocs.com/2024/
@@ -161,6 +218,7 @@ namespace GridBuilderAddin.Services
                     // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
                     // Grid.Create(Document, Line) — revitapidocs.com/2024/8a44a4e5-eecc-1b26-b0a2-3f9f4fe24062.htm
                     var grid = Grid.Create(doc, line);
+                    createdIds?.Add(grid.Id);
 
                     // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
                     // Grid.Name (property setter) — revitapidocs.com/2024/
