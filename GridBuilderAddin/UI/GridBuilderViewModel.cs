@@ -244,6 +244,12 @@ namespace GridBuilderAddin.UI
         public double X { get; set; }
         /// <summary>Canvas.Top position in pixels.</summary>
         public double Y { get; set; }
+        /// <summary>
+        /// When <c>true</c>, the XAML DataTemplate applies a 90° clockwise rotation so
+        /// the label reads top-to-bottom. Used for the Y-axis overall dimension annotation
+        /// which appears to the right of the grid where horizontal space is limited.
+        /// </summary>
+        public bool IsVertical { get; set; }
     }
 
     // ── Main ViewModel ────────────────────────────────────────────────────────
@@ -807,9 +813,10 @@ namespace GridBuilderAddin.UI
                 var yMidPx = (yPositions[0].cy + yPositions[yPositions.Count - 1].cy) / 2.0;
                 PreviewDimLabels.Add(new PreviewLabelModel
                 {
-                    Text = FormatDimension(totalY),
-                    X    = lineRight + 4,
-                    Y    = yMidPx - 7
+                    Text       = FormatDimension(totalY),
+                    X          = lineRight + 4,
+                    Y          = yMidPx,
+                    IsVertical = true   // rotated 90° so text reads downward without clipping
                 });
             }
 

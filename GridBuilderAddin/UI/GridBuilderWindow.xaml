@@ -471,10 +471,35 @@
                                 </ItemsControl.ItemContainerStyle>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
+                                        <!--
+                                            The X total label is horizontal (IsVertical=False).
+                                            The Y total label is rotated 90° (IsVertical=True) so
+                                            it reads downward without clipping the right canvas edge.
+                                        -->
                                         <TextBlock Text="{Binding Text}"
                                                    FontSize="8"
                                                    FontWeight="SemiBold"
-                                                   Foreground="#1A1A1A"/>
+                                                   Foreground="#1A1A1A"
+                                                   RenderTransformOrigin="0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="RenderTransform">
+                                                        <Setter.Value>
+                                                            <RotateTransform Angle="0"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsVertical}" Value="True">
+                                                            <Setter Property="RenderTransform">
+                                                                <Setter.Value>
+                                                                    <RotateTransform Angle="90"/>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
