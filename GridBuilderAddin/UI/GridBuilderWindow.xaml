@@ -4,53 +4,47 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Grid Builder"
     Width="560"
+    Height="780"
     MinWidth="480"
-    SizeToContent="Height"
-    ResizeMode="NoResize"
+    MinHeight="620"
+    ResizeMode="CanResize"
     WindowStartupLocation="CenterOwner"
     Background="#F5F5F5">
 
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <!-- ── Colours ──────────────────────────────────────────────────── -->
-        <SolidColorBrush x:Key="PrimaryBlue"      Color="#0070C5"/>
-        <SolidColorBrush x:Key="DarkHeader"       Color="#2D2D2D"/>
-        <SolidColorBrush x:Key="CardBorder"       Color="#E0E0E0"/>
-        <SolidColorBrush x:Key="ErrorBrush"       Color="#C0392B"/>
-        <SolidColorBrush x:Key="GridLineXBrush"   Color="#0070C5"/>
-        <SolidColorBrush x:Key="GridLineYBrush"   Color="#E07000"/>
+        <SolidColorBrush x:Key="PrimaryBlue"    Color="#0070C5"/>
+        <SolidColorBrush x:Key="DarkHeader"     Color="#2D2D2D"/>
+        <SolidColorBrush x:Key="CardBorder"     Color="#E0E0E0"/>
+        <SolidColorBrush x:Key="ErrorBrush"     Color="#C0392B"/>
+        <SolidColorBrush x:Key="GridLineXBrush" Color="#0070C5"/>
+        <SolidColorBrush x:Key="GridLineYBrush" Color="#E07000"/>
 
         <!-- ── Card border style ────────────────────────────────────────── -->
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background"       Value="White"/>
-            <Setter Property="BorderBrush"      Value="{StaticResource CardBorder}"/>
-            <Setter Property="BorderThickness"  Value="1"/>
-            <Setter Property="CornerRadius"     Value="4"/>
-            <Setter Property="Padding"          Value="8"/>
-            <Setter Property="Margin"           Value="0,0,0,8"/>
+            <Setter Property="Background"      Value="White"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource CardBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="4"/>
+            <Setter Property="Padding"         Value="8"/>
+            <Setter Property="Margin"          Value="0,0,0,8"/>
         </Style>
 
         <!-- ── Section heading ──────────────────────────────────────────── -->
         <Style x:Key="SectionHeading" TargetType="TextBlock">
-            <Setter Property="FontWeight"   Value="SemiBold"/>
-            <Setter Property="FontSize"     Value="11"/>
-            <Setter Property="Foreground"   Value="#555555"/>
-            <Setter Property="Margin"       Value="0,0,0,6"/>
-        </Style>
-
-        <!-- ── Label next to a field ────────────────────────────────────── -->
-        <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="FontSize"         Value="12"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin"           Value="0,0,8,0"/>
-            <Setter Property="Width"            Value="220"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize"   Value="11"/>
+            <Setter Property="Foreground" Value="#555555"/>
+            <Setter Property="Margin"     Value="0,0,0,6"/>
         </Style>
 
         <!-- ── Standard text box ────────────────────────────────────────── -->
         <Style TargetType="TextBox">
-            <Setter Property="FontSize"     Value="12"/>
-            <Setter Property="Padding"      Value="4,3"/>
-            <Setter Property="Width"        Value="90"/>
+            <Setter Property="FontSize"                   Value="12"/>
+            <Setter Property="Padding"                    Value="4,3"/>
+            <Setter Property="Width"                      Value="90"/>
             <Setter Property="HorizontalContentAlignment" Value="Right"/>
         </Style>
 
@@ -66,20 +60,26 @@
 
         <!-- ── Button: default ──────────────────────────────────────────── -->
         <Style TargetType="Button">
-            <Setter Property="FontSize"   Value="12"/>
-            <Setter Property="Padding"    Value="18,6"/>
-            <Setter Property="MinWidth"   Value="100"/>
-            <Setter Property="Cursor"     Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding"  Value="18,6"/>
+            <Setter Property="MinWidth" Value="100"/>
+            <Setter Property="Cursor"   Value="Hand"/>
         </Style>
 
         <!-- ── Button: primary (Revit accent blue) ──────────────────────── -->
         <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background"   Value="{StaticResource PrimaryBlue}"/>
-            <Setter Property="Foreground"   Value="White"/>
-            <Setter Property="BorderBrush"  Value="#005A9E"/>
+            <Setter Property="Background"  Value="{StaticResource PrimaryBlue}"/>
+            <Setter Property="Foreground"  Value="White"/>
+            <Setter Property="BorderBrush" Value="#005A9E"/>
         </Style>
 
-        <!-- ── Spacing interval row template (shared by X and Y lists) ──── -->
+        <!--
+            ── Spacing interval row template (shared by X and Y lists) ──────
+            Each row shows either:
+              • mm mode  — a single SpacingText TextBox
+              • ft-in mode — FeetText + InchesText TextBoxes
+            Visibility of each sub-panel is driven by IsMmMode / IsFtInMode on the row.
+        -->
         <DataTemplate x:Key="SpacingRowTemplate">
             <Grid Margin="0,2">
                 <Grid.ColumnDefinitions>
@@ -94,12 +94,41 @@
                            VerticalAlignment="Center"
                            Foreground="#444"/>
 
-                <!-- Spacing override text box -->
-                <TextBox Grid.Column="1"
-                         Text="{Binding SpacingText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{StaticResource SpacingTextBox}"
-                         Width="100"
-                         HorizontalAlignment="Left"/>
+                <!-- Unit-sensitive input area -->
+                <Grid Grid.Column="1">
+
+                    <!-- mm input -->
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding IsMmMode, Converter={StaticResource BoolToVis}}">
+                        <TextBox Text="{Binding SpacingText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource SpacingTextBox}"
+                                 Width="100"
+                                 HorizontalAlignment="Left"/>
+                    </StackPanel>
+
+                    <!-- ft-in input -->
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding IsFtInMode, Converter={StaticResource BoolToVis}}">
+                        <TextBox Text="{Binding FeetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource SpacingTextBox}"
+                                 Width="52"
+                                 HorizontalAlignment="Left"/>
+                        <TextBlock Text=" ft"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="#666"
+                                   Margin="2,0,8,0"/>
+                        <TextBox Text="{Binding InchesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource SpacingTextBox}"
+                                 Width="60"
+                                 HorizontalAlignment="Left"/>
+                        <TextBlock Text=" in"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="#666"
+                                   Margin="2,0,0,0"/>
+                    </StackPanel>
+                </Grid>
             </Grid>
         </DataTemplate>
 
@@ -117,7 +146,7 @@
                        Foreground="White"/>
         </Border>
 
-        <!-- ══ Footer (docked to bottom so it stays visible) ═════════════ -->
+        <!-- ══ Footer (docked to bottom so it stays visible on resize) ═══ -->
         <Border DockPanel.Dock="Bottom"
                 Background="White"
                 BorderBrush="{StaticResource CardBorder}"
@@ -172,7 +201,8 @@
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
 
-                        <!-- X grid count -->
+                        <!-- X grid count — fix: FieldLabel no longer has Width="220",
+                             so label stretches to fill the * column (left-justified). -->
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -180,9 +210,11 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0"
                                        Text="Number of X Grids (Numerical)  —  min 2"
-                                       Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Column="1"
-                                       Text="{Binding XCountText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding XCountText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </Grid>
 
                         <!-- Y grid count -->
@@ -193,35 +225,150 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0"
                                        Text="Number of Y Grids (Alphabetical)  —  min 2"
-                                       Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Column="1"
-                                       Text="{Binding YCountText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding YCountText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </Grid>
 
-                        <!-- Default spacing -->
-                        <Grid>
+                        <!-- Default X Spacing -->
+                        <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0"
-                                       Text="Default Spacing (mm)"
-                                       Style="{StaticResource FieldLabel}"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBox Text="{Binding DefaultSpacingText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                       Text="Default X Spacing"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+
+                            <!-- mm variant -->
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Visibility="{Binding IsMmMode, Converter={StaticResource BoolToVis}}">
+                                <TextBox Text="{Binding XDefaultSpacingText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 <TextBlock Text=" mm"
                                            VerticalAlignment="Center"
                                            FontSize="12"
                                            Foreground="#666"
                                            Margin="4,0,0,0"/>
                             </StackPanel>
+
+                            <!-- ft-in variant -->
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Visibility="{Binding IsFtInMode, Converter={StaticResource BoolToVis}}">
+                                <TextBox Text="{Binding XDefaultFeetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Width="55"/>
+                                <TextBlock Text=" ft"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="#666"
+                                           Margin="2,0,8,0"/>
+                                <TextBox Text="{Binding XDefaultInchesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Width="60"/>
+                                <TextBlock Text=" in"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="#666"
+                                           Margin="2,0,0,0"/>
+                            </StackPanel>
+
+                            <!-- Refresh X button — skips manually overridden intervals -->
+                            <Button Grid.Column="2"
+                                    Content="↺"
+                                    Command="{Binding RefreshXDefaultCommand}"
+                                    Margin="6,0,0,0"
+                                    Padding="6,2"
+                                    MinWidth="0"
+                                    FontSize="13"
+                                    ToolTip="Re-apply default X spacing to all non-overridden intervals"/>
                         </Grid>
+
+                        <!-- Default Y Spacing -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="Default Y Spacing"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+
+                            <!-- mm variant -->
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Visibility="{Binding IsMmMode, Converter={StaticResource BoolToVis}}">
+                                <TextBox Text="{Binding YDefaultSpacingText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text=" mm"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="#666"
+                                           Margin="4,0,0,0"/>
+                            </StackPanel>
+
+                            <!-- ft-in variant -->
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Visibility="{Binding IsFtInMode, Converter={StaticResource BoolToVis}}">
+                                <TextBox Text="{Binding YDefaultFeetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Width="55"/>
+                                <TextBlock Text=" ft"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="#666"
+                                           Margin="2,0,8,0"/>
+                                <TextBox Text="{Binding YDefaultInchesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Width="60"/>
+                                <TextBlock Text=" in"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="#666"
+                                           Margin="2,0,0,0"/>
+                            </StackPanel>
+
+                            <!-- Refresh Y button — skips manually overridden intervals -->
+                            <Button Grid.Column="2"
+                                    Content="↺"
+                                    Command="{Binding RefreshYDefaultCommand}"
+                                    Margin="6,0,0,0"
+                                    Padding="6,2"
+                                    MinWidth="0"
+                                    FontSize="13"
+                                    ToolTip="Re-apply default Y spacing to all non-overridden intervals"/>
+                        </Grid>
+
+                        <!-- Unit toggle -->
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <TextBlock Text="Units:"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Foreground="#444"
+                                       Margin="0,0,8,0"/>
+                            <RadioButton Content="Millimetres"
+                                         IsChecked="{Binding IsMmMode, Mode=TwoWay}"
+                                         GroupName="UnitGroup"
+                                         FontSize="12"
+                                         VerticalContentAlignment="Center"
+                                         Margin="0,0,16,0"/>
+                            <RadioButton Content="Feet &amp; Inches"
+                                         IsChecked="{Binding IsFtInMode, Mode=TwoWay}"
+                                         GroupName="UnitGroup"
+                                         FontSize="12"
+                                         VerticalContentAlignment="Center"/>
+                        </StackPanel>
 
                     </StackPanel>
                 </Border>
 
                 <!-- ── Section 2: X Spacing Overrides ───────────────── -->
-                <TextBlock Text="X SPACING OVERRIDES  (mm per interval)" Style="{StaticResource SectionHeading}"/>
+                <TextBlock Text="{Binding XSpacingHeading}" Style="{StaticResource SectionHeading}"/>
                 <Border Style="{StaticResource Card}" MaxHeight="160">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding XSpacingRows}"
@@ -231,7 +378,7 @@
                 </Border>
 
                 <!-- ── Section 3: Y Spacing Overrides ───────────────── -->
-                <TextBlock Text="Y SPACING OVERRIDES  (mm per interval)" Style="{StaticResource SectionHeading}"/>
+                <TextBlock Text="{Binding YSpacingHeading}" Style="{StaticResource SectionHeading}"/>
                 <Border Style="{StaticResource Card}" MaxHeight="160">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding YSpacingRows}"
@@ -240,66 +387,125 @@
                     </ScrollViewer>
                 </Border>
 
-                <!-- ── Section 4: Live Preview ───────────────────────── -->
+                <!-- ── Section 4: Live Preview (centered via Viewbox) ── -->
                 <TextBlock Text="SCHEMATIC PREVIEW" Style="{StaticResource SectionHeading}"/>
-                <Border Style="{StaticResource Card}" Padding="0">
-                    <Grid>
-                        <!-- Line layer -->
-                        <ItemsControl ItemsSource="{Binding PreviewLines}"
-                                      Width="340" Height="220"
-                                      HorizontalAlignment="Left"
-                                      IsHitTestVisible="False">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <Canvas Width="340" Height="220" Background="White"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Line X1="{Binding X1}" Y1="{Binding Y1}"
-                                          X2="{Binding X2}" Y2="{Binding Y2}"
-                                          StrokeThickness="1"
-                                          IsHitTestVisible="False">
-                                        <Line.Style>
-                                            <Style TargetType="Line">
-                                                <Setter Property="Stroke" Value="{StaticResource GridLineXBrush}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsXGrid}" Value="False">
-                                                        <Setter Property="Stroke" Value="{StaticResource GridLineYBrush}"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Line.Style>
-                                    </Line>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                <Border Style="{StaticResource Card}" Padding="8">
+                    <!--
+                        Viewbox scales the fixed 340×220 canvas to fill the card's
+                        available width while keeping the aspect ratio.
+                        HorizontalAlignment="Center" centres it horizontally.
+                    -->
+                    <Viewbox Stretch="Uniform"
+                             HorizontalAlignment="Center"
+                             MaxHeight="260">
+                        <Grid Width="340" Height="220">
 
-                        <!-- Label layer -->
-                        <ItemsControl ItemsSource="{Binding PreviewLabels}"
-                                      Width="340" Height="220"
-                                      HorizontalAlignment="Left"
-                                      IsHitTestVisible="False">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <Canvas Width="340" Height="220"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemContainerStyle>
-                                <Style TargetType="ContentPresenter">
-                                    <Setter Property="Canvas.Left" Value="{Binding X}"/>
-                                    <Setter Property="Canvas.Top"  Value="{Binding Y}"/>
-                                </Style>
-                            </ItemsControl.ItemContainerStyle>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Text}"
-                                               FontSize="9"
-                                               Foreground="#333"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </Grid>
+                            <!-- Line layer -->
+                            <ItemsControl ItemsSource="{Binding PreviewLines}"
+                                          Width="340" Height="220"
+                                          IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas Width="340" Height="220" Background="White"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Line X1="{Binding X1}" Y1="{Binding Y1}"
+                                              X2="{Binding X2}" Y2="{Binding Y2}"
+                                              StrokeThickness="1"
+                                              IsHitTestVisible="False">
+                                            <Line.Style>
+                                                <Style TargetType="Line">
+                                                    <Setter Property="Stroke" Value="{StaticResource GridLineXBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsXGrid}" Value="False">
+                                                            <Setter Property="Stroke" Value="{StaticResource GridLineYBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Line.Style>
+                                        </Line>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Label layer -->
+                            <ItemsControl ItemsSource="{Binding PreviewLabels}"
+                                          Width="340" Height="220"
+                                          IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas Width="340" Height="220"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding X}"/>
+                                        <Setter Property="Canvas.Top"  Value="{Binding Y}"/>
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Text}"
+                                                   FontSize="9"
+                                                   Foreground="#333"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Dimension annotation layer — overall width and height totals -->
+                            <ItemsControl ItemsSource="{Binding PreviewDimLabels}"
+                                          Width="340" Height="220"
+                                          IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas Width="340" Height="220"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding X}"/>
+                                        <Setter Property="Canvas.Top"  Value="{Binding Y}"/>
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <!--
+                                            The X total label is horizontal (IsVertical=False).
+                                            The Y total label is rotated 90° (IsVertical=True) so
+                                            it reads downward without clipping the right canvas edge.
+                                        -->
+                                        <TextBlock Text="{Binding Text}"
+                                                   FontSize="8"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#1A1A1A"
+                                                   RenderTransformOrigin="0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="RenderTransform">
+                                                        <Setter.Value>
+                                                            <RotateTransform Angle="0"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsVertical}" Value="True">
+                                                            <Setter Property="RenderTransform">
+                                                                <Setter.Value>
+                                                                    <RotateTransform Angle="90"/>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                        </Grid>
+                    </Viewbox>
                 </Border>
 
                 <Rectangle Height="8"/>

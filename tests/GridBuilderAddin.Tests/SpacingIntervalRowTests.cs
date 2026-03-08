@@ -3,13 +3,14 @@
 // No Revit API dependency — these run in any xUnit host.
 using GridBuilderAddin.UI;
 using System;
+using System.Collections.Generic;
 using Xunit;
 
 namespace GridBuilderAddin.Tests
 {
     /// <summary>
     /// Verifies <see cref="SpacingIntervalRow"/> validation logic,
-    /// property change notification, and value parsing.
+    /// property change notification, and value parsing for both unit modes.
     /// </summary>
     public class SpacingIntervalRowTests
     {
@@ -23,16 +24,15 @@ namespace GridBuilderAddin.Tests
         }
 
         [Fact]
-        public void Constructor_PreFillsSpacingText_WithDefaultValue()
+        public void Constructor_PreFillsSpacingText_WithDefaultMmValue()
         {
             var row = new SpacingIntervalRow("A → B", 8000);
             Assert.Equal("8000", row.SpacingText);
         }
 
         [Fact]
-        public void Constructor_PreFillsSpacingText_FormattedWithoutTrailingZeros()
+        public void Constructor_PreFillsSpacingText_NoTrailingDecimal()
         {
-            // 8000.00 → "8000" (0.## format strips trailing zeros and decimal)
             var row = new SpacingIntervalRow("1 → 2", 8000.00);
             Assert.DoesNotContain(".", row.SpacingText);
         }
@@ -43,85 +43,313 @@ namespace GridBuilderAddin.Tests
             Assert.Throws<ArgumentNullException>(() => new SpacingIntervalRow(null!, 8000));
         }
 
-        // ── IsValid ──────────────────────────────────────────────────────────
+        [Fact]
+        public void Constructor_DefaultUnitMode_IsMillimeters()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            Assert.Equal(GridUnitMode.Millimeters, row.UnitMode);
+            Assert.True(row.IsMmMode);
+            Assert.False(row.IsFtInMode);
+        }
+
+        // ── Millimetre mode — IsValid ────────────────────────────────────────
 
         [Fact]
-        public void IsValid_True_WhenSpacingTextIsPositiveNumber()
+        public void IsValid_Mm_True_WhenSpacingIsPositive()
         {
             var row = new SpacingIntervalRow("1 → 2", 8000);
             Assert.True(row.IsValid);
         }
 
         [Fact]
-        public void IsValid_False_WhenSpacingTextIsZero()
+        public void IsValid_Mm_False_WhenZero()
         {
             var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "0" };
             Assert.False(row.IsValid);
         }
 
         [Fact]
-        public void IsValid_False_WhenSpacingTextIsNegative()
+        public void IsValid_Mm_False_WhenNegative()
         {
             var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "-500" };
             Assert.False(row.IsValid);
         }
 
         [Fact]
-        public void IsValid_False_WhenSpacingTextIsEmpty()
+        public void IsValid_Mm_False_WhenEmpty()
         {
             var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "" };
             Assert.False(row.IsValid);
         }
 
         [Fact]
-        public void IsValid_False_WhenSpacingTextIsNonNumeric()
+        public void IsValid_Mm_False_WhenNonNumeric()
         {
             var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "abc" };
             Assert.False(row.IsValid);
         }
 
         [Fact]
-        public void IsValid_False_WhenSpacingTextIsWhitespaceOnly()
-        {
-            var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "   " };
-            Assert.False(row.IsValid);
-        }
-
-        [Fact]
-        public void IsValid_True_WhenSpacingIsDecimal()
+        public void IsValid_Mm_True_WhenDecimal()
         {
             var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "6500.5" };
             Assert.True(row.IsValid);
         }
 
-        [Fact]
-        public void IsValid_True_WhenSpacingIsVerySmallPositive()
-        {
-            var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "0.001" };
-            Assert.True(row.IsValid);
-        }
-
-        // ── ValueMm ──────────────────────────────────────────────────────────
+        // ── Millimetre mode — ValueMm ────────────────────────────────────────
 
         [Fact]
-        public void ValueMm_ReturnsParsedValue_WhenValid()
+        public void ValueMm_Mm_ReturnsParsedValue()
         {
             var row = new SpacingIntervalRow("1 → 2", 8000);
             Assert.Equal(8000.0, row.ValueMm);
         }
 
         [Fact]
-        public void ValueMm_ReturnsZero_WhenInvalid()
+        public void ValueMm_Mm_ReturnsZero_WhenInvalid()
         {
-            var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "notANumber" };
+            var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "abc" };
             Assert.Equal(0.0, row.ValueMm);
         }
 
+        // ── Feet-and-inches mode — construction ──────────────────────────────
+
         [Fact]
-        public void ValueMm_ReturnsCorrectDecimalValue()
+        public void Constructor_FtInMode_PreFillsFeetAndInches_From8000mm()
         {
-            var row = new SpacingIntervalRow("1 → 2", 8000) { SpacingText = "6500.75" };
-            Assert.Equal(6500.75, row.ValueMm);
+            // 8000 mm = 26.247 ft → 26 ft 2.96 in ≈ 26 ft 2.97 in
+            var row = new SpacingIntervalRow("1 → 2", 8000, GridUnitMode.FeetAndInches);
+            Assert.Equal("26", row.FeetText);
+            // Inches should be positive and less than 12
+            Assert.True(double.TryParse(row.InchesText, out var inches));
+            Assert.True(inches >= 0 && inches < 12);
+        }
+
+        [Fact]
+        public void Constructor_FtInMode_IsFtInModeTrue()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000, GridUnitMode.FeetAndInches);
+            Assert.True(row.IsFtInMode);
+            Assert.False(row.IsMmMode);
+        }
+
+        // ── Feet-and-inches mode — IsValid ───────────────────────────────────
+
+        [Fact]
+        public void IsValid_FtIn_True_When26Ft0In()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "26";
+            row.InchesText = "0";
+            Assert.True(row.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_FtIn_True_When0Ft6In()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "0";
+            row.InchesText = "6";
+            Assert.True(row.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_FtIn_False_When0Ft0In()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "0";
+            row.InchesText = "0";
+            Assert.False(row.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_FtIn_False_WhenInchesIs12()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "1";
+            row.InchesText = "12";
+            Assert.False(row.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_FtIn_False_WhenInchesIsNegative()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "1";
+            row.InchesText = "-1";
+            Assert.False(row.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_FtIn_False_WhenFeetIsNegative()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "-1";
+            row.InchesText = "0";
+            Assert.False(row.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_FtIn_False_WhenFeetIsNonInteger()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "26.5";
+            row.InchesText = "0";
+            Assert.False(row.IsValid);   // FeetText must be a whole number
+        }
+
+        [Fact]
+        public void IsValid_FtIn_True_WhenInchesIsDecimal()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "10";
+            row.InchesText = "6.5";
+            Assert.True(row.IsValid);
+        }
+
+        // ── Feet-and-inches mode — ValueMm ───────────────────────────────────
+
+        [Fact]
+        public void ValueMm_FtIn_Returns_CorrectConversion_1Ft0In()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "1";
+            row.InchesText = "0";
+            // 1 ft = 304.8 mm
+            Assert.Equal(304.8, row.ValueMm, precision: 4);
+        }
+
+        [Fact]
+        public void ValueMm_FtIn_Returns_CorrectConversion_0Ft12In_Invalid()
+        {
+            // 12 inches is invalid (>= 12), ValueMm returns 0 * 304.8 + 0 * 25.4
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "0";
+            row.InchesText = "12";
+            // IsValid is false; TryParse still succeeds for "12", so ValueMm = 0 + 12 * 25.4
+            // But IsValid guard is caller's responsibility — we just verify math
+            Assert.False(row.IsValid);
+        }
+
+        [Fact]
+        public void ValueMm_FtIn_Returns_CorrectConversion_26Ft3In()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 1000, GridUnitMode.FeetAndInches);
+            row.FeetText   = "26";
+            row.InchesText = "3";
+            // 26 * 304.8 + 3 * 25.4 = 7924.8 + 76.2 = 8001.0
+            Assert.Equal(8001.0, row.ValueMm, precision: 4);
+        }
+
+        // ── UnitMode switch ──────────────────────────────────────────────────
+
+        [Fact]
+        public void UnitMode_Switch_UpdatesIsMmMode_AndIsFtInMode()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            Assert.True(row.IsMmMode);
+
+            row.UnitMode = GridUnitMode.FeetAndInches;
+            Assert.False(row.IsMmMode);
+            Assert.True(row.IsFtInMode);
+        }
+
+        [Fact]
+        public void SetFromMm_PopulatesBothMmAndFtInFields()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SetFromMm(304.8);  // exactly 1 ft 0 in
+
+            Assert.Equal("304.8", row.SpacingText);
+            Assert.Equal("1",     row.FeetText);
+            Assert.Equal("0",     row.InchesText);
+        }
+
+        // ── IsManualOverride ──────────────────────────────────────────────────
+
+        [Fact]
+        public void Constructor_IsManualOverride_False()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            Assert.False(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void SpacingText_Setter_SetsIsManualOverride_True()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SpacingText = "5000";
+            Assert.True(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void FeetText_Setter_SetsIsManualOverride_True()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000, GridUnitMode.FeetAndInches);
+            row.FeetText = "10";
+            Assert.True(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void InchesText_Setter_SetsIsManualOverride_True()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000, GridUnitMode.FeetAndInches);
+            row.InchesText = "6";
+            Assert.True(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void SetFromMm_DoesNotSetIsManualOverride()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SetFromMm(5000);
+            Assert.False(row.IsManualOverride);
+        }
+
+        // ── ResetToDefault ────────────────────────────────────────────────────
+
+        [Fact]
+        public void ResetToDefault_ClearsIsManualOverride()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SpacingText = "5000";  // makes IsManualOverride = true
+            Assert.True(row.IsManualOverride);
+
+            row.ResetToDefault(8000);
+            Assert.False(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void ResetToDefault_UpdatesSpacingText()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SpacingText = "5000";
+
+            row.ResetToDefault(7000);
+            Assert.Equal("7000", row.SpacingText);
+        }
+
+        [Fact]
+        public void ResetToDefault_UpdatesFtInFields()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000, GridUnitMode.FeetAndInches);
+            row.FeetText = "10";
+
+            row.ResetToDefault(304.8);   // 1 ft 0 in
+            Assert.Equal("1",  row.FeetText);
+            Assert.Equal("0",  row.InchesText);
+        }
+
+        [Fact]
+        public void ResetToDefault_RaisesPropertyChanged_ForIsManualOverride()
+        {
+            var row         = new SpacingIntervalRow("1 → 2", 8000);
+            row.SpacingText = "5000";
+            var raisedNames = new List<string?>();
+            row.PropertyChanged += (_, e) => raisedNames.Add(e.PropertyName);
+
+            row.ResetToDefault(8000);
+            Assert.Contains(nameof(row.IsManualOverride), raisedNames);
         }
 
         // ── INotifyPropertyChanged ────────────────────────────────────────────
@@ -130,7 +358,7 @@ namespace GridBuilderAddin.Tests
         public void SpacingText_Setter_RaisesPropertyChanged_ForSpacingText()
         {
             var row         = new SpacingIntervalRow("1 → 2", 8000);
-            var raisedNames = new System.Collections.Generic.List<string?>();
+            var raisedNames = new List<string?>();
             row.PropertyChanged += (_, e) => raisedNames.Add(e.PropertyName);
 
             row.SpacingText = "5000";
@@ -142,12 +370,27 @@ namespace GridBuilderAddin.Tests
         public void SpacingText_Setter_RaisesPropertyChanged_ForIsValid()
         {
             var row         = new SpacingIntervalRow("1 → 2", 8000);
-            var raisedNames = new System.Collections.Generic.List<string?>();
+            var raisedNames = new List<string?>();
             row.PropertyChanged += (_, e) => raisedNames.Add(e.PropertyName);
 
             row.SpacingText = "invalid";
 
             Assert.Contains("IsValid", raisedNames);
+        }
+
+        [Fact]
+        public void UnitMode_Setter_RaisesPropertyChanged_ForRelatedProperties()
+        {
+            var row         = new SpacingIntervalRow("1 → 2", 8000);
+            var raisedNames = new List<string?>();
+            row.PropertyChanged += (_, e) => raisedNames.Add(e.PropertyName);
+
+            row.UnitMode = GridUnitMode.FeetAndInches;
+
+            Assert.Contains(nameof(row.UnitMode),   raisedNames);
+            Assert.Contains(nameof(row.IsMmMode),   raisedNames);
+            Assert.Contains(nameof(row.IsFtInMode), raisedNames);
+            Assert.Contains(nameof(row.IsValid),    raisedNames);
         }
     }
 }

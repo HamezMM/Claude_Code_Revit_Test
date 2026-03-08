@@ -11,53 +11,200 @@ using System.Windows.Input;
 
 namespace GridBuilderAddin.UI
 {
-    // ── Supporting view-model types ─────────────────────────────────────────
+    // ── Unit mode enum ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Controls whether spacing values are entered in millimetres or in
+    /// feet + decimal inches (imperial).
+    /// </summary>
+    public enum GridUnitMode
+    {
+        /// <summary>All spacing values in millimetres.</summary>
+        Millimeters,
+        /// <summary>All spacing values as whole feet + decimal inches (0–11.99).</summary>
+        FeetAndInches
+    }
+
+    // ── SpacingIntervalRow ────────────────────────────────────────────────────
 
     /// <summary>
     /// Represents a single configurable spacing interval in the X or Y override list.
-    /// Raises <see cref="INotifyPropertyChanged"/> so the parent ViewModel can
-    /// revalidate and refresh the preview on every keystroke.
+    /// Supports both millimetre and feet-and-inches input; the active mode is driven
+    /// by the parent ViewModel via the <see cref="UnitMode"/> property.
     /// </summary>
     public class SpacingIntervalRow : INotifyPropertyChanged
     {
-        private string _spacingText = string.Empty;
+        // ── Backing fields ────────────────────────────────────────────────────
+        private string       _spacingText      = string.Empty;
+        private string       _feetText         = string.Empty;
+        private string       _inchesText       = string.Empty;
+        private GridUnitMode _unitMode         = GridUnitMode.Millimeters;
+        private bool         _isManualOverride = false;
 
-        /// <summary>Human-readable label shown to the left of the text box, e.g. "1 → 2" or "A → B".</summary>
+        // ── Label ─────────────────────────────────────────────────────────────
+
+        /// <summary>Human-readable label shown to the left of the input fields, e.g. "1 → 2" or "A → B".</summary>
         public string Label { get; }
 
+        // ── Manual override flag ──────────────────────────────────────────────
+
         /// <summary>
-        /// Text currently entered in the spacing text box. Must parse to a positive double
-        /// for the row to be considered valid. Triggers <see cref="IsValid"/> recalculation.
+        /// <c>true</c> when the user has manually edited this row's spacing, overriding the
+        /// typical default. Set to <c>false</c> when the row is initialised or reset via
+        /// <see cref="ResetToDefault"/>. The Refresh command skips rows where this is <c>true</c>.
         /// </summary>
-        public string SpacingText
+        public bool IsManualOverride
         {
-            get => _spacingText;
+            get => _isManualOverride;
+            private set { _isManualOverride = value; OnPropertyChanged(); }
+        }
+
+        // ── Unit mode ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Current unit mode for this row. Set by the parent ViewModel when the user
+        /// switches units. Triggers <see cref="IsValid"/> and helper bool recalculations.
+        /// </summary>
+        public GridUnitMode UnitMode
+        {
+            get => _unitMode;
             set
             {
-                _spacingText = value;
+                _unitMode = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(IsMmMode));
+                OnPropertyChanged(nameof(IsFtInMode));
                 OnPropertyChanged(nameof(IsValid));
             }
         }
 
-        /// <summary><c>true</c> when <see cref="SpacingText"/> represents a positive finite number.</summary>
-        public bool IsValid =>
-            double.TryParse(SpacingText, out var v) && v > 0 && !double.IsInfinity(v);
+        /// <summary><c>true</c> when <see cref="UnitMode"/> is <see cref="GridUnitMode.Millimeters"/>.</summary>
+        public bool IsMmMode   => _unitMode == GridUnitMode.Millimeters;
+
+        /// <summary><c>true</c> when <see cref="UnitMode"/> is <see cref="GridUnitMode.FeetAndInches"/>.</summary>
+        public bool IsFtInMode => _unitMode == GridUnitMode.FeetAndInches;
+
+        // ── Millimetre field ──────────────────────────────────────────────────
 
         /// <summary>
-        /// Parses <see cref="SpacingText"/> and returns the spacing in millimetres.
-        /// Callers should check <see cref="IsValid"/> first.
+        /// Text value for the millimetre input field. Setting this via the property setter
+        /// (i.e. from WPF binding / user input) marks the row as <see cref="IsManualOverride"/>.
         /// </summary>
-        public double ValueMm => double.TryParse(SpacingText, out var v) ? v : 0;
+        public string SpacingText
+        {
+            get => _spacingText;
+            set { _spacingText = value; _isManualOverride = true; OnPropertyChanged(); OnPropertyChanged(nameof(IsValid)); }
+        }
 
-        /// <summary>Initialises the row with the given label and pre-fills the spacing text.</summary>
+        // ── Feet and Inches fields ────────────────────────────────────────────
+
+        /// <summary>
+        /// Whole-feet part of the spacing in <see cref="GridUnitMode.FeetAndInches"/> mode.
+        /// Must parse to a non-negative integer. Setting raises <see cref="IsManualOverride"/>.
+        /// </summary>
+        public string FeetText
+        {
+            get => _feetText;
+            set { _feetText = value; _isManualOverride = true; OnPropertyChanged(); OnPropertyChanged(nameof(IsValid)); }
+        }
+
+        /// <summary>
+        /// Decimal-inches part of the spacing in <see cref="GridUnitMode.FeetAndInches"/> mode.
+        /// Must parse to a <see cref="double"/> in the range [0, 12). Setting raises <see cref="IsManualOverride"/>.
+        /// </summary>
+        public string InchesText
+        {
+            get => _inchesText;
+            set { _inchesText = value; _isManualOverride = true; OnPropertyChanged(); OnPropertyChanged(nameof(IsValid)); }
+        }
+
+        // ── Validation ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// <c>true</c> when the active mode's input fields contain a valid, positive spacing.
+        /// </summary>
+        public bool IsValid => _unitMode == GridUnitMode.Millimeters ? IsValidMm : IsValidFtIn;
+
+        private bool IsValidMm =>
+            double.TryParse(_spacingText, out var v) && v > 0 && !double.IsInfinity(v);
+
+        private bool IsValidFtIn =>
+            int.TryParse(_feetText, out var f) && f >= 0
+            && double.TryParse(_inchesText, out var i) && i >= 0 && i < 12
+            && (f > 0 || i > 0);   // total spacing must be positive
+
+        // ── Computed value ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the spacing value in millimetres from whichever field set is active.
+        /// Returns 0 if the inputs are invalid. Callers should check <see cref="IsValid"/> first.
+        /// </summary>
+        public double ValueMm
+        {
+            get
+            {
+                if (_unitMode == GridUnitMode.Millimeters)
+                    return double.TryParse(_spacingText, out var v) ? v : 0.0;
+
+                int.TryParse(_feetText,      out var f);
+                double.TryParse(_inchesText, out var i);
+                return f * 304.8 + i * 25.4;
+            }
+        }
+
+        // ── Constructor ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Initialises the row with the given label and pre-fills both input sets
+        /// from the supplied default spacing in millimetres. <see cref="IsManualOverride"/>
+        /// is <c>false</c> after construction.
+        /// </summary>
         /// <param name="label">Human-readable interval label (e.g. "1 → 2"). Must not be null.</param>
         /// <param name="defaultSpacingMm">Initial spacing value in millimetres.</param>
-        public SpacingIntervalRow(string label, double defaultSpacingMm)
+        /// <param name="unitMode">Active unit mode at construction time.</param>
+        public SpacingIntervalRow(string label, double defaultSpacingMm, GridUnitMode unitMode = GridUnitMode.Millimeters)
         {
-            Label        = label ?? throw new ArgumentNullException(nameof(label));
-            _spacingText = defaultSpacingMm.ToString("0.##");
+            Label    = label ?? throw new ArgumentNullException(nameof(label));
+            _unitMode = unitMode;
+            SetFromMm(defaultSpacingMm);
+            // _isManualOverride stays false — SetFromMm writes to backing fields directly
         }
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Populates both the mm and ft-in backing fields from a value in millimetres.
+        /// Does <b>not</b> set <see cref="IsManualOverride"/>. Called on construction and
+        /// whenever the unit mode changes.
+        /// </summary>
+        public void SetFromMm(double mm)
+        {
+            _spacingText = mm.ToString("0.##");
+
+            var totalInches = mm / 25.4;
+            var feet        = (int)(totalInches / 12);
+            var inches      = Math.Round(totalInches % 12, 2);
+
+            _feetText   = feet.ToString();
+            _inchesText = inches.ToString("0.##");
+        }
+
+        /// <summary>
+        /// Resets this row to the given typical spacing value, clearing
+        /// <see cref="IsManualOverride"/>. Called by the Refresh command on non-overridden rows.
+        /// </summary>
+        public void ResetToDefault(double mm)
+        {
+            _isManualOverride = false;
+            SetFromMm(mm);
+            OnPropertyChanged(nameof(SpacingText));
+            OnPropertyChanged(nameof(FeetText));
+            OnPropertyChanged(nameof(InchesText));
+            OnPropertyChanged(nameof(IsManualOverride));
+            OnPropertyChanged(nameof(IsValid));
+        }
+
+        // ── INotifyPropertyChanged ────────────────────────────────────────────
 
         /// <inheritdoc/>
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -65,6 +212,8 @@ namespace GridBuilderAddin.UI
         private void OnPropertyChanged([CallerMemberName] string? name = null) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
+
+    // ── Preview model types ───────────────────────────────────────────────────
 
     /// <summary>
     /// Data for a single line drawn on the live preview <see cref="System.Windows.Controls.Canvas"/>.
@@ -89,29 +238,106 @@ namespace GridBuilderAddin.UI
     /// </summary>
     public class PreviewLabelModel
     {
-        /// <summary>Label text (e.g. "1", "A", "AA").</summary>
+        /// <summary>Label text (e.g. "1", "A", "32,000 mm").</summary>
         public string Text { get; set; } = string.Empty;
         /// <summary>Canvas.Left position in pixels.</summary>
         public double X { get; set; }
         /// <summary>Canvas.Top position in pixels.</summary>
         public double Y { get; set; }
+        /// <summary>
+        /// When <c>true</c>, the XAML DataTemplate applies a 90° clockwise rotation so
+        /// the label reads top-to-bottom. Used for the Y-axis overall dimension annotation
+        /// which appears to the right of the grid where horizontal space is limited.
+        /// </summary>
+        public bool IsVertical { get; set; }
     }
 
-    // ── Main ViewModel ──────────────────────────────────────────────────────
+    // ── Main ViewModel ────────────────────────────────────────────────────────
 
     /// <summary>
     /// MVVM ViewModel for <see cref="GridBuilderWindow"/>.
     /// Implements <see cref="INotifyPropertyChanged"/> and dynamically builds
-    /// spacing interval row collections as the user changes grid counts.
-    /// No Revit API references — all values are in millimetres.
+    /// spacing interval row collections as the user changes grid counts or unit mode.
+    /// No Revit API references — all values are stored and returned in millimetres.
     /// </summary>
     public class GridBuilderViewModel : INotifyPropertyChanged
     {
-        // ── Raw text inputs (validated in ViewModel) ────────────────────────
+        // ── Unit mode ─────────────────────────────────────────────────────────
 
-        private string _xCountText = GridBuilderConstants.DefaultXCount.ToString();
-        private string _yCountText = GridBuilderConstants.DefaultYCount.ToString();
-        private string _defaultSpacingText = GridBuilderConstants.DefaultSpacingMm.ToString("0.##");
+        private GridUnitMode _unitMode = GridUnitMode.Millimeters;
+
+        /// <summary>
+        /// Active unit mode. Changing this converts all existing spacing values and
+        /// propagates the new mode to all spacing interval rows.
+        /// </summary>
+        public GridUnitMode UnitMode
+        {
+            get => _unitMode;
+            set
+            {
+                if (_unitMode == value) return;
+                ConvertAllRowsOnModeChange();
+                _unitMode = value;
+                PropagateUnitModeToRows();
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsMmMode));
+                OnPropertyChanged(nameof(IsFtInMode));
+                OnPropertyChanged(nameof(SpacingUnitLabel));
+                OnPropertyChanged(nameof(XSpacingHeading));
+                OnPropertyChanged(nameof(YSpacingHeading));
+                OnPropertyChanged(nameof(DefaultSpacingLabel));
+                Revalidate();
+            }
+        }
+
+        /// <summary>
+        /// <c>true</c> when <see cref="UnitMode"/> is <see cref="GridUnitMode.Millimeters"/>.
+        /// Two-way bindable; setting <c>true</c> sets <see cref="UnitMode"/> to Millimeters.
+        /// </summary>
+        public bool IsMmMode
+        {
+            get => _unitMode == GridUnitMode.Millimeters;
+            set { if (value) UnitMode = GridUnitMode.Millimeters; }
+        }
+
+        /// <summary>
+        /// <c>true</c> when <see cref="UnitMode"/> is <see cref="GridUnitMode.FeetAndInches"/>.
+        /// Two-way bindable; setting <c>true</c> sets <see cref="UnitMode"/> to FeetAndInches.
+        /// </summary>
+        public bool IsFtInMode
+        {
+            get => _unitMode == GridUnitMode.FeetAndInches;
+            set { if (value) UnitMode = GridUnitMode.FeetAndInches; }
+        }
+
+        /// <summary>Unit suffix shown in spacing override section headings.</summary>
+        public string SpacingUnitLabel =>
+            _unitMode == GridUnitMode.Millimeters ? "mm per interval" : "ft-in per interval";
+
+        /// <summary>Dynamic heading for the X spacing overrides card.</summary>
+        public string XSpacingHeading => $"X SPACING OVERRIDES  ({SpacingUnitLabel})";
+
+        /// <summary>Dynamic heading for the Y spacing overrides card.</summary>
+        public string YSpacingHeading => $"Y SPACING OVERRIDES  ({SpacingUnitLabel})";
+
+        /// <summary>Label shown next to the default spacing field — kept for backward compatibility.</summary>
+        public string DefaultSpacingLabel =>
+            _unitMode == GridUnitMode.Millimeters ? "Default Spacing (mm)" : "Default Spacing";
+
+        // ── Raw text inputs ───────────────────────────────────────────────────
+
+        private string _xCountText          = GridBuilderConstants.DefaultXCount.ToString();
+        private string _yCountText          = GridBuilderConstants.DefaultYCount.ToString();
+
+        // X typical spacing
+        private string _xDefaultSpacingText = GridBuilderConstants.DefaultSpacingMm.ToString("0.##");
+        private string _xDefaultFeetText    = GridBuilderConstants.DefaultFeet.ToString();
+        private string _xDefaultInchesText  = GridBuilderConstants.DefaultInches.ToString("0.##");
+
+        // Y typical spacing (independent of X)
+        private string _yDefaultSpacingText = GridBuilderConstants.DefaultSpacingMm.ToString("0.##");
+        private string _yDefaultFeetText    = GridBuilderConstants.DefaultFeet.ToString();
+        private string _yDefaultInchesText  = GridBuilderConstants.DefaultInches.ToString("0.##");
 
         /// <summary>Text value bound to the X-axis grid count text box.</summary>
         public string XCountText
@@ -139,19 +365,53 @@ namespace GridBuilderAddin.UI
             }
         }
 
-        /// <summary>Text value bound to the default spacing text box (millimetres).</summary>
-        public string DefaultSpacingText
+        // ── X typical spacing properties ──────────────────────────────────────
+
+        /// <summary>Text value for the X typical spacing in millimetre mode.</summary>
+        public string XDefaultSpacingText
         {
-            get => _defaultSpacingText;
-            set
-            {
-                _defaultSpacingText = value;
-                OnPropertyChanged();
-                Revalidate();
-            }
+            get => _xDefaultSpacingText;
+            set { _xDefaultSpacingText = value; OnPropertyChanged(); Revalidate(); }
         }
 
-        // ── Spacing interval row collections ────────────────────────────────
+        /// <summary>Whole-feet part of the X typical spacing in feet-and-inches mode.</summary>
+        public string XDefaultFeetText
+        {
+            get => _xDefaultFeetText;
+            set { _xDefaultFeetText = value; OnPropertyChanged(); Revalidate(); }
+        }
+
+        /// <summary>Decimal-inches part of the X typical spacing (0–11.99) in feet-and-inches mode.</summary>
+        public string XDefaultInchesText
+        {
+            get => _xDefaultInchesText;
+            set { _xDefaultInchesText = value; OnPropertyChanged(); Revalidate(); }
+        }
+
+        // ── Y typical spacing properties ──────────────────────────────────────
+
+        /// <summary>Text value for the Y typical spacing in millimetre mode.</summary>
+        public string YDefaultSpacingText
+        {
+            get => _yDefaultSpacingText;
+            set { _yDefaultSpacingText = value; OnPropertyChanged(); Revalidate(); }
+        }
+
+        /// <summary>Whole-feet part of the Y typical spacing in feet-and-inches mode.</summary>
+        public string YDefaultFeetText
+        {
+            get => _yDefaultFeetText;
+            set { _yDefaultFeetText = value; OnPropertyChanged(); Revalidate(); }
+        }
+
+        /// <summary>Decimal-inches part of the Y typical spacing (0–11.99) in feet-and-inches mode.</summary>
+        public string YDefaultInchesText
+        {
+            get => _yDefaultInchesText;
+            set { _yDefaultInchesText = value; OnPropertyChanged(); Revalidate(); }
+        }
+
+        // ── Spacing interval row collections ──────────────────────────────────
 
         /// <summary>
         /// Observable collection of X-axis spacing override rows.
@@ -165,7 +425,7 @@ namespace GridBuilderAddin.UI
         /// </summary>
         public ObservableCollection<SpacingIntervalRow> YSpacingRows { get; } = new ObservableCollection<SpacingIntervalRow>();
 
-        // ── Validation ───────────────────────────────────────────────────────
+        // ── Validation ────────────────────────────────────────────────────────
 
         /// <summary>
         /// Human-readable validation message shown above the footer buttons.
@@ -176,15 +436,18 @@ namespace GridBuilderAddin.UI
         /// <summary><c>true</c> when all inputs are valid and "Create Grids" may be enabled.</summary>
         public bool IsValid { get; private set; }
 
-        // ── Preview ──────────────────────────────────────────────────────────
+        // ── Preview ───────────────────────────────────────────────────────────
 
         /// <summary>Lines to render on the live schematic preview canvas.</summary>
-        public ObservableCollection<PreviewLineModel> PreviewLines { get; } = new ObservableCollection<PreviewLineModel>();
+        public ObservableCollection<PreviewLineModel>  PreviewLines     { get; } = new ObservableCollection<PreviewLineModel>();
 
-        /// <summary>Labels to render on the live schematic preview canvas.</summary>
-        public ObservableCollection<PreviewLabelModel> PreviewLabels { get; } = new ObservableCollection<PreviewLabelModel>();
+        /// <summary>Grid line labels to render on the live schematic preview canvas.</summary>
+        public ObservableCollection<PreviewLabelModel> PreviewLabels    { get; } = new ObservableCollection<PreviewLabelModel>();
 
-        // ── Commands ─────────────────────────────────────────────────────────
+        /// <summary>Overall dimension annotations rendered on the live schematic preview canvas.</summary>
+        public ObservableCollection<PreviewLabelModel> PreviewDimLabels { get; } = new ObservableCollection<PreviewLabelModel>();
+
+        // ── Commands ──────────────────────────────────────────────────────────
 
         /// <summary>Bound to the "Create Grids" button; enabled only when <see cref="IsValid"/> is <c>true</c>.</summary>
         public ICommand CreateGridsCommand { get; }
@@ -192,7 +455,19 @@ namespace GridBuilderAddin.UI
         /// <summary>Bound to the "Cancel" button.</summary>
         public ICommand CancelCommand { get; }
 
-        // ── Dialog result ────────────────────────────────────────────────────
+        /// <summary>
+        /// Re-applies the X typical spacing to all X intervals that have not been manually overridden.
+        /// Intervals where <see cref="SpacingIntervalRow.IsManualOverride"/> is <c>true</c> are skipped.
+        /// </summary>
+        public ICommand RefreshXDefaultCommand { get; }
+
+        /// <summary>
+        /// Re-applies the Y typical spacing to all Y intervals that have not been manually overridden.
+        /// Intervals where <see cref="SpacingIntervalRow.IsManualOverride"/> is <c>true</c> are skipped.
+        /// </summary>
+        public ICommand RefreshYDefaultCommand { get; }
+
+        // ── Dialog result ─────────────────────────────────────────────────────
 
         /// <summary>Set to <c>true</c> when the user confirms; <c>false</c> on cancel.</summary>
         public bool? DialogResult { get; private set; }
@@ -200,24 +475,24 @@ namespace GridBuilderAddin.UI
         /// <summary>Raised when the ViewModel requests the window to close.</summary>
         public event EventHandler? RequestClose;
 
-        // ── Constructor ──────────────────────────────────────────────────────
+        // ── Constructor ───────────────────────────────────────────────────────
 
         /// <summary>Initialises the ViewModel with default values and builds the initial row collections.</summary>
         public GridBuilderViewModel()
         {
-            CreateGridsCommand = new RelayCommand(OnCreateGrids, () => IsValid);
-            CancelCommand      = new RelayCommand(OnCancel);
+            CreateGridsCommand     = new RelayCommand(OnCreateGrids, () => IsValid);
+            CancelCommand          = new RelayCommand(OnCancel);
+            RefreshXDefaultCommand = new RelayCommand(OnRefreshXDefault);
+            RefreshYDefaultCommand = new RelayCommand(OnRefreshYDefault);
 
-            // Build initial rows using default counts
             RebuildXRows(GridBuilderConstants.DefaultXCount);
             RebuildYRows(GridBuilderConstants.DefaultYCount);
-
             Revalidate();
 
             Debug.WriteLine("[GridBuilder] ViewModel initialised with defaults.");
         }
 
-        // ── Command handlers ─────────────────────────────────────────────────
+        // ── Command handlers ──────────────────────────────────────────────────
 
         private void OnCreateGrids()
         {
@@ -231,29 +506,44 @@ namespace GridBuilderAddin.UI
             RequestClose?.Invoke(this, EventArgs.Empty);
         }
 
-        // ── Build GridConfig ─────────────────────────────────────────────────
+        private void OnRefreshXDefault()
+        {
+            var mm = TryParseXDefaultSpacingMm();
+            foreach (var row in XSpacingRows)
+                if (!row.IsManualOverride)
+                    row.ResetToDefault(mm);
+            Revalidate();
+        }
+
+        private void OnRefreshYDefault()
+        {
+            var mm = TryParseYDefaultSpacingMm();
+            foreach (var row in YSpacingRows)
+                if (!row.IsManualOverride)
+                    row.ResetToDefault(mm);
+            Revalidate();
+        }
+
+        // ── Build GridConfig ──────────────────────────────────────────────────
 
         /// <summary>
         /// Constructs a <see cref="GridConfig"/> from the current ViewModel state.
-        /// Call only after confirming <see cref="IsValid"/> is <c>true</c>.
+        /// All spacing values in the returned config are always in millimetres,
+        /// regardless of which unit mode is active. Call only when <see cref="IsValid"/> is <c>true</c>.
         /// </summary>
         public GridConfig BuildConfig()
         {
-            int xCount   = int.Parse(XCountText);
-            int yCount   = int.Parse(YCountText);
-            double defSp = double.Parse(DefaultSpacingText);
-
             return new GridConfig
             {
-                XCount          = xCount,
-                YCount          = yCount,
-                DefaultSpacingMm = defSp,
-                XSpacingsMm     = XSpacingRows.Select(r => r.ValueMm).ToList(),
-                YSpacingsMm     = YSpacingRows.Select(r => r.ValueMm).ToList()
+                XCount           = int.Parse(XCountText),
+                YCount           = int.Parse(YCountText),
+                DefaultSpacingMm = TryParseXDefaultSpacingMm(),
+                XSpacingsMm      = XSpacingRows.Select(r => r.ValueMm).ToList(),
+                YSpacingsMm      = YSpacingRows.Select(r => r.ValueMm).ToList()
             };
         }
 
-        // ── Row rebuild helpers ──────────────────────────────────────────────
+        // ── Row rebuild helpers ───────────────────────────────────────────────
 
         private int _currentXCount;
         private int _currentYCount;
@@ -262,7 +552,6 @@ namespace GridBuilderAddin.UI
         {
             if (!int.TryParse(XCountText, out var count) || count < GridBuilderConstants.MinGridCount)
                 return;
-
             if (count != _currentXCount)
                 RebuildXRows(count);
         }
@@ -271,66 +560,98 @@ namespace GridBuilderAddin.UI
         {
             if (!int.TryParse(YCountText, out var count) || count < GridBuilderConstants.MinGridCount)
                 return;
-
             if (count != _currentYCount)
                 RebuildYRows(count);
         }
 
         private void RebuildXRows(int xCount)
         {
-            // Unsubscribe from old rows
             foreach (var row in XSpacingRows)
                 row.PropertyChanged -= SpacingRow_PropertyChanged;
-
             XSpacingRows.Clear();
 
-            double defSp = TryParseDefaultSpacing();
-
-            // Interval labels: "1 → 2", "2 → 3", ...
+            var defMm = TryParseXDefaultSpacingMm();
             for (int i = 0; i < xCount - 1; i++)
             {
-                var label = $"{i + 1} \u2192 {i + 2}";
-                var row   = new SpacingIntervalRow(label, defSp);
+                var row = new SpacingIntervalRow($"{i + 1} \u2192 {i + 2}", defMm, _unitMode);
                 row.PropertyChanged += SpacingRow_PropertyChanged;
                 XSpacingRows.Add(row);
             }
 
             _currentXCount = xCount;
-            Debug.WriteLine($"[GridBuilder] Rebuilt {XSpacingRows.Count} X spacing rows for XCount={xCount}.");
+            Debug.WriteLine($"[GridBuilder] Rebuilt {XSpacingRows.Count} X rows for XCount={xCount}.");
         }
 
         private void RebuildYRows(int yCount)
         {
             foreach (var row in YSpacingRows)
                 row.PropertyChanged -= SpacingRow_PropertyChanged;
-
             YSpacingRows.Clear();
 
-            double defSp = TryParseDefaultSpacing();
-
-            // Interval labels: "A → B", "B → C", ...
+            var defMm = TryParseYDefaultSpacingMm();
             for (int i = 0; i < yCount - 1; i++)
             {
-                var label = $"{GetAlphaLabel(i)} \u2192 {GetAlphaLabel(i + 1)}";
-                var row   = new SpacingIntervalRow(label, defSp);
+                var row = new SpacingIntervalRow($"{GetAlphaLabel(i)} \u2192 {GetAlphaLabel(i + 1)}", defMm, _unitMode);
                 row.PropertyChanged += SpacingRow_PropertyChanged;
                 YSpacingRows.Add(row);
             }
 
             _currentYCount = yCount;
-            Debug.WriteLine($"[GridBuilder] Rebuilt {YSpacingRows.Count} Y spacing rows for YCount={yCount}.");
+            Debug.WriteLine($"[GridBuilder] Rebuilt {YSpacingRows.Count} Y rows for YCount={yCount}.");
         }
 
-        private void SpacingRow_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
+        private void SpacingRow_PropertyChanged(object? sender, PropertyChangedEventArgs e) =>
             Revalidate();
+
+        // ── Unit mode switching ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Captures the current mm values from every row and both default spacing fields,
+        /// then writes converted values back via <see cref="SpacingIntervalRow.SetFromMm"/>
+        /// so both backing-field sets are populated before the mode flag flips.
+        /// </summary>
+        private void ConvertAllRowsOnModeChange()
+        {
+            var xMmValues  = XSpacingRows.Select(r => r.ValueMm).ToList();
+            var yMmValues  = YSpacingRows.Select(r => r.ValueMm).ToList();
+            var xDefaultMm = TryParseXDefaultSpacingMm();
+            var yDefaultMm = TryParseYDefaultSpacingMm();
+
+            for (int i = 0; i < XSpacingRows.Count; i++) XSpacingRows[i].SetFromMm(xMmValues[i]);
+            for (int i = 0; i < YSpacingRows.Count; i++) YSpacingRows[i].SetFromMm(yMmValues[i]);
+
+            // Sync X default display fields for both modes
+            _xDefaultSpacingText = xDefaultMm.ToString("0.##");
+            var xTotalIn         = xDefaultMm / 25.4;
+            _xDefaultFeetText    = ((int)(xTotalIn / 12)).ToString();
+            _xDefaultInchesText  = Math.Round(xTotalIn % 12, 2).ToString("0.##");
+
+            // Sync Y default display fields for both modes
+            _yDefaultSpacingText = yDefaultMm.ToString("0.##");
+            var yTotalIn         = yDefaultMm / 25.4;
+            _yDefaultFeetText    = ((int)(yTotalIn / 12)).ToString();
+            _yDefaultInchesText  = Math.Round(yTotalIn % 12, 2).ToString("0.##");
+
+            OnPropertyChanged(nameof(XDefaultSpacingText));
+            OnPropertyChanged(nameof(XDefaultFeetText));
+            OnPropertyChanged(nameof(XDefaultInchesText));
+            OnPropertyChanged(nameof(YDefaultSpacingText));
+            OnPropertyChanged(nameof(YDefaultFeetText));
+            OnPropertyChanged(nameof(YDefaultInchesText));
         }
 
-        // ── Validation & preview ─────────────────────────────────────────────
+        /// <summary>Pushes the current <see cref="_unitMode"/> to every spacing row.</summary>
+        private void PropagateUnitModeToRows()
+        {
+            foreach (var row in XSpacingRows) row.UnitMode = _unitMode;
+            foreach (var row in YSpacingRows) row.UnitMode = _unitMode;
+        }
+
+        // ── Validation & preview ──────────────────────────────────────────────
 
         private void Revalidate()
         {
-            var msg  = ComputeValidationMessage();
+            var msg   = ComputeValidationMessage();
             var valid = string.IsNullOrEmpty(msg);
 
             ValidationMessage = msg;
@@ -340,123 +661,191 @@ namespace GridBuilderAddin.UI
             OnPropertyChanged(nameof(IsValid));
             CommandManager.InvalidateRequerySuggested();
 
-            if (valid)
-                UpdatePreview();
+            if (valid) UpdatePreview();
         }
 
         private string ComputeValidationMessage()
         {
             if (!int.TryParse(XCountText, out var xCount) || xCount < GridBuilderConstants.MinGridCount)
-                return $"Number of X Grids must be an integer ≥ {GridBuilderConstants.MinGridCount}.";
+                return $"Number of X Grids must be an integer \u2265 {GridBuilderConstants.MinGridCount}.";
 
             if (!int.TryParse(YCountText, out var yCount) || yCount < GridBuilderConstants.MinGridCount)
-                return $"Number of Y Grids must be an integer ≥ {GridBuilderConstants.MinGridCount}.";
+                return $"Number of Y Grids must be an integer \u2265 {GridBuilderConstants.MinGridCount}.";
 
-            if (!double.TryParse(DefaultSpacingText, out var defSp) || defSp <= 0)
-                return "Default Spacing must be a positive number.";
+            if (_unitMode == GridUnitMode.Millimeters)
+            {
+                if (!double.TryParse(XDefaultSpacingText, out var xSp) || xSp <= 0)
+                    return "Default X Spacing must be a positive number.";
+                if (!double.TryParse(YDefaultSpacingText, out var ySp) || ySp <= 0)
+                    return "Default Y Spacing must be a positive number.";
+            }
+            else
+            {
+                if (!int.TryParse(XDefaultFeetText, out var xdf) || xdf < 0
+                    || !double.TryParse(XDefaultInchesText, out var xdi) || xdi < 0 || xdi >= 12
+                    || (xdf == 0 && xdi <= 0))
+                    return "Default X Spacing must be a positive ft-in value (inches: 0 \u2013 11.99).";
+                if (!int.TryParse(YDefaultFeetText, out var ydf) || ydf < 0
+                    || !double.TryParse(YDefaultInchesText, out var ydi) || ydi < 0 || ydi >= 12
+                    || (ydf == 0 && ydi <= 0))
+                    return "Default Y Spacing must be a positive ft-in value (inches: 0 \u2013 11.99).";
+            }
 
             if (XSpacingRows.Any(r => !r.IsValid))
-                return "One or more X spacing values are invalid. All spacings must be positive numbers.";
+                return "One or more X spacing values are invalid.";
 
             if (YSpacingRows.Any(r => !r.IsValid))
-                return "One or more Y spacing values are invalid. All spacings must be positive numbers.";
+                return "One or more Y spacing values are invalid.";
 
             return string.Empty;
         }
 
-        private double TryParseDefaultSpacing()
+        private double TryParseXDefaultSpacingMm()
         {
-            return double.TryParse(DefaultSpacingText, out var v) && v > 0
-                ? v
-                : GridBuilderConstants.DefaultSpacingMm;
+            if (_unitMode == GridUnitMode.Millimeters)
+            {
+                return double.TryParse(_xDefaultSpacingText, out var v) && v > 0
+                    ? v
+                    : GridBuilderConstants.DefaultSpacingMm;
+            }
+
+            int.TryParse(_xDefaultFeetText,    out var f);
+            double.TryParse(_xDefaultInchesText, out var i);
+            var computed = f * 304.8 + i * 25.4;
+            return computed > 0 ? computed : GridBuilderConstants.DefaultSpacingMm;
         }
 
-        // ── Live preview ─────────────────────────────────────────────────────
+        private double TryParseYDefaultSpacingMm()
+        {
+            if (_unitMode == GridUnitMode.Millimeters)
+            {
+                return double.TryParse(_yDefaultSpacingText, out var v) && v > 0
+                    ? v
+                    : GridBuilderConstants.DefaultSpacingMm;
+            }
+
+            int.TryParse(_yDefaultFeetText,    out var f);
+            double.TryParse(_yDefaultInchesText, out var i);
+            var computed = f * 304.8 + i * 25.4;
+            return computed > 0 ? computed : GridBuilderConstants.DefaultSpacingMm;
+        }
+
+        // ── Live preview ──────────────────────────────────────────────────────
 
         private void UpdatePreview()
         {
             PreviewLines.Clear();
             PreviewLabels.Clear();
+            PreviewDimLabels.Clear();
 
             var xSpacings = XSpacingRows.Select(r => r.ValueMm).ToList();
             var ySpacings = YSpacingRows.Select(r => r.ValueMm).ToList();
 
-            double totalX = xSpacings.Sum();   // world mm
-            double totalY = ySpacings.Sum();   // world mm (represented positive; actual Y is negative)
+            double totalX = xSpacings.Sum();
+            double totalY = ySpacings.Sum();
 
             double cw     = GridBuilderConstants.PreviewCanvasWidth;
             double ch     = GridBuilderConstants.PreviewCanvasHeight;
             double margin = GridBuilderConstants.PreviewMarginPx;
             double extPx  = GridBuilderConstants.PreviewExtentPx;
 
-            double drawW = cw - 2 * margin;
-            double drawH = ch - 2 * margin;
+            double drawW  = cw - 2 * margin;
+            double drawH  = ch - 2 * margin;
 
-            // Scale: fit the grid into the drawable area, preserving aspect ratio
             double scaleX = totalX > 0 ? drawW / totalX : 1.0;
             double scaleY = totalY > 0 ? drawH / totalY : 1.0;
             double scale  = Math.Min(scaleX, scaleY);
 
-            // Centre the grid in the canvas
             double gridPxW = totalX * scale;
             double gridPxH = totalY * scale;
             double offX    = margin + (drawW - gridPxW) / 2.0;
             double offY    = margin + (drawH - gridPxH) / 2.0;
 
-            // Accumulate X positions (canvas pixels)
-            var xPositions = new List<(double cx, string label)>();
-            double cumX = 0;
-            int xCount  = XSpacingRows.Count + 1;
-            xPositions.Add((offX, "1"));
+            // X grid line positions (vertical)
+            var xPositions = new List<(double cx, string label)> { (offX, "1") };
+            double cumX    = 0;
             for (int i = 0; i < xSpacings.Count; i++)
             {
                 cumX += xSpacings[i];
                 xPositions.Add((offX + cumX * scale, (i + 2).ToString()));
             }
 
-            // Accumulate Y positions (canvas pixels; Y grids go downward in canvas)
-            var yPositions = new List<(double cy, string label)>();
-            double cumY = 0;
-            int yCount  = YSpacingRows.Count + 1;
-            yPositions.Add((offY, GetAlphaLabel(0)));
+            // Y grid line positions (horizontal)
+            var yPositions = new List<(double cy, string label)> { (offY, GetAlphaLabel(0)) };
+            double cumY    = 0;
             for (int i = 0; i < ySpacings.Count; i++)
             {
                 cumY += ySpacings[i];
                 yPositions.Add((offY + cumY * scale, GetAlphaLabel(i + 1)));
             }
 
-            double lineTop = offY - extPx;
-            double lineBot = offY + gridPxH + extPx;
+            double lineTop   = offY - extPx;
+            double lineBot   = offY + gridPxH + extPx;
             double lineLeft  = offX - extPx;
             double lineRight = offX + gridPxW + extPx;
 
-            // Draw vertical X grid lines
             foreach (var (cx, label) in xPositions)
             {
                 PreviewLines.Add(new PreviewLineModel { X1 = cx, Y1 = lineTop, X2 = cx, Y2 = lineBot, IsXGrid = true });
                 PreviewLabels.Add(new PreviewLabelModel { Text = label, X = cx + 2, Y = lineTop - 14 });
             }
 
-            // Draw horizontal Y grid lines
             foreach (var (cy, label) in yPositions)
             {
                 PreviewLines.Add(new PreviewLineModel { X1 = lineLeft, Y1 = cy, X2 = lineRight, Y2 = cy, IsXGrid = false });
                 PreviewLabels.Add(new PreviewLabelModel { Text = label, X = lineLeft - 18, Y = cy - 7 });
             }
 
-            Debug.WriteLine($"[GridBuilder] Preview updated: {xCount} X grids, {yCount} Y grids.");
+            // ── Overall dimension annotations ─────────────────────────────────
+            if (totalX > 0)
+            {
+                var xMidPx = (xPositions[0].cx + xPositions[xPositions.Count - 1].cx) / 2.0;
+                PreviewDimLabels.Add(new PreviewLabelModel
+                {
+                    Text = FormatDimension(totalX),
+                    X    = xMidPx - 28,
+                    Y    = lineBot + 5
+                });
+            }
+
+            if (totalY > 0)
+            {
+                var yMidPx = (yPositions[0].cy + yPositions[yPositions.Count - 1].cy) / 2.0;
+                PreviewDimLabels.Add(new PreviewLabelModel
+                {
+                    Text       = FormatDimension(totalY),
+                    X          = lineRight + 4,
+                    Y          = yMidPx,
+                    IsVertical = true   // rotated 90° so text reads downward without clipping
+                });
+            }
+
+            Debug.WriteLine($"[GridBuilder] Preview updated: {xPositions.Count} X, {yPositions.Count} Y.");
         }
 
-        // ── Alpha label helper ───────────────────────────────────────────────
+        private string FormatDimension(double mm)
+        {
+            if (_unitMode == GridUnitMode.Millimeters)
+                return $"{mm:N0} mm";
+
+            var totalIn = mm / 25.4;
+            var ft      = (int)(totalIn / 12);
+            var inch    = Math.Round(totalIn % 12, 2);
+            return inch > 0
+                ? $"{ft} ft {inch:0.##} in"
+                : $"{ft} ft";
+        }
+
+        // ── Alpha label helper ────────────────────────────────────────────────
 
         /// <summary>
         /// Converts a zero-based index to an alphabetical grid label.
-        /// 0→"A", 1→"B", …, 25→"Z", 26→"AA", 27→"AB", …, 701→"ZZ", 702→"AAA", etc.
+        /// 0→"A", 25→"Z", 26→"AA", 701→"ZZ", 702→"AAA", etc.
         /// </summary>
         public static string GetAlphaLabel(int zeroBasedIndex)
         {
             var result = string.Empty;
-            var n      = zeroBasedIndex + 1; // 1-based
+            var n      = zeroBasedIndex + 1;
             while (n > 0)
             {
                 n--;
@@ -466,7 +855,7 @@ namespace GridBuilderAddin.UI
             return result;
         }
 
-        // ── INotifyPropertyChanged ───────────────────────────────────────────
+        // ── INotifyPropertyChanged ────────────────────────────────────────────
 
         /// <inheritdoc/>
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -476,7 +865,7 @@ namespace GridBuilderAddin.UI
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    // ── RelayCommand ────────────────────────────────────────────────────────
+    // ── RelayCommand ──────────────────────────────────────────────────────────
 
     /// <summary>
     /// Minimal <see cref="ICommand"/> implementation that delegates to supplied delegates.
