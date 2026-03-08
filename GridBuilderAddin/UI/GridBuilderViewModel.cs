@@ -283,8 +283,6 @@ namespace GridBuilderAddin.UI
                 OnPropertyChanged(nameof(IsMmMode));
                 OnPropertyChanged(nameof(IsFtInMode));
                 OnPropertyChanged(nameof(SpacingUnitLabel));
-                OnPropertyChanged(nameof(XSpacingHeading));
-                OnPropertyChanged(nameof(YSpacingHeading));
                 OnPropertyChanged(nameof(DefaultSpacingLabel));
                 Revalidate();
             }
@@ -314,11 +312,29 @@ namespace GridBuilderAddin.UI
         public string SpacingUnitLabel =>
             _unitMode == GridUnitMode.Millimeters ? "mm per interval" : "ft-in per interval";
 
-        /// <summary>Dynamic heading for the X spacing overrides card.</summary>
-        public string XSpacingHeading => $"X SPACING OVERRIDES  ({SpacingUnitLabel})";
+        /// <summary>Dynamic heading for the X spacing overrides card, including total building width.</summary>
+        public string XSpacingHeading
+        {
+            get
+            {
+                var heading = $"X SPACING OVERRIDES  ({SpacingUnitLabel})";
+                if (XSpacingRows.Count > 0 && XSpacingRows.All(r => r.IsValid))
+                    heading += $"  —  Total: {FormatDimension(XSpacingRows.Sum(r => r.ValueMm))}";
+                return heading;
+            }
+        }
 
-        /// <summary>Dynamic heading for the Y spacing overrides card.</summary>
-        public string YSpacingHeading => $"Y SPACING OVERRIDES  ({SpacingUnitLabel})";
+        /// <summary>Dynamic heading for the Y spacing overrides card, including total building depth.</summary>
+        public string YSpacingHeading
+        {
+            get
+            {
+                var heading = $"Y SPACING OVERRIDES  ({SpacingUnitLabel})";
+                if (YSpacingRows.Count > 0 && YSpacingRows.All(r => r.IsValid))
+                    heading += $"  —  Total: {FormatDimension(YSpacingRows.Sum(r => r.ValueMm))}";
+                return heading;
+            }
+        }
 
         /// <summary>Label shown next to the default spacing field — kept for backward compatibility.</summary>
         public string DefaultSpacingLabel =>
@@ -447,9 +463,40 @@ namespace GridBuilderAddin.UI
         /// <summary>Overall dimension annotations rendered on the live schematic preview canvas.</summary>
         public ObservableCollection<PreviewLabelModel> PreviewDimLabels { get; } = new ObservableCollection<PreviewLabelModel>();
 
+        // ── Building Builder mode ─────────────────────────────────────────────
+
+        private bool _isBuildingBuilderEnabled = false;
+
+        /// <summary>
+        /// When <c>true</c> the tool enters multi-step Building Builder mode (Grid → Level → Structure).
+        /// The footer primary button changes from "Create Grids" to "Next →" and a step indicator appears.
+        /// </summary>
+        public bool IsBuildingBuilderEnabled
+        {
+            get => _isBuildingBuilderEnabled;
+            set
+            {
+                if (_isBuildingBuilderEnabled == value) return;
+                _isBuildingBuilderEnabled = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PrimaryButtonText));
+                OnPropertyChanged(nameof(StepIndicatorText));
+                OnPropertyChanged(nameof(ShowStepIndicator));
+            }
+        }
+
+        /// <summary>Text for the primary footer button — changes based on Building Builder mode.</summary>
+        public string PrimaryButtonText => _isBuildingBuilderEnabled ? "Next →" : "Create Grids";
+
+        /// <summary>Step indicator text shown when Building Builder mode is active.</summary>
+        public string StepIndicatorText => "Step 1 of 3  —  Grid Builder";
+
+        /// <summary><c>true</c> when the step indicator should be visible.</summary>
+        public bool ShowStepIndicator => _isBuildingBuilderEnabled;
+
         // ── Commands ──────────────────────────────────────────────────────────
 
-        /// <summary>Bound to the "Create Grids" button; enabled only when <see cref="IsValid"/> is <c>true</c>.</summary>
+        /// <summary>Bound to the primary footer button; enabled only when <see cref="IsValid"/> is <c>true</c>.</summary>
         public ICommand CreateGridsCommand { get; }
 
         /// <summary>Bound to the "Cancel" button.</summary>
@@ -659,6 +706,8 @@ namespace GridBuilderAddin.UI
 
             OnPropertyChanged(nameof(ValidationMessage));
             OnPropertyChanged(nameof(IsValid));
+            OnPropertyChanged(nameof(XSpacingHeading));
+            OnPropertyChanged(nameof(YSpacingHeading));
             CommandManager.InvalidateRequerySuggested();
 
             if (valid) UpdatePreview();
@@ -865,6 +914,22 @@ namespace GridBuilderAddin.UI
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
+    // ── WindowCloseAction ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Signals how a Building Builder dialog window was closed.
+    /// Used by <see cref="GridBuilderAddin.Commands.GridBuilderCmd"/> to drive the multi-step flow.
+    /// </summary>
+    public enum WindowCloseAction
+    {
+        /// <summary>User confirmed and wants to proceed to the next step.</summary>
+        Confirmed,
+        /// <summary>User cancelled; abort the entire Building Builder flow.</summary>
+        Cancelled,
+        /// <summary>User wants to return to the previous step.</summary>
+        GoBack
+    }
+
     // ── RelayCommand ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -888,6 +953,41 @@ namespace GridBuilderAddin.UI
 
         /// <inheritdoc/>
         public void Execute(object? parameter) => _execute();
+
+        /// <inheritdoc/>
+        public event EventHandler? CanExecuteChanged
+        {
+            add    => CommandManager.RequerySuggested += value;
+            remove => CommandManager.RequerySuggested -= value;
+        }
+    }
+
+    // ── RelayCommand<T> ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Generic <see cref="ICommand"/> implementation that passes a typed parameter to the execute delegate.
+    /// </summary>
+    internal class RelayCommand<T> : ICommand
+    {
+        private readonly Action<T> _execute;
+        private readonly Func<T, bool>? _canExecute;
+
+        /// <summary>Creates a new parameterised relay command.</summary>
+        public RelayCommand(Action<T> execute, Func<T, bool>? canExecute = null)
+        {
+            _execute    = execute ?? throw new ArgumentNullException(nameof(execute));
+            _canExecute = canExecute;
+        }
+
+        /// <inheritdoc/>
+        public bool CanExecute(object? parameter) =>
+            parameter is T t ? (_canExecute?.Invoke(t) ?? true) : false;
+
+        /// <inheritdoc/>
+        public void Execute(object? parameter)
+        {
+            if (parameter is T t) _execute(t);
+        }
 
         /// <inheritdoc/>
         public event EventHandler? CanExecuteChanged

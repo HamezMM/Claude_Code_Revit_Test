@@ -139,11 +139,38 @@
         <!-- ══ Dark header bar ════════════════════════════════════════════ -->
         <Border DockPanel.Dock="Top"
                 Background="{StaticResource DarkHeader}"
-                Padding="16,12">
-            <TextBlock Text="Grid Builder"
-                       FontSize="15"
-                       FontWeight="SemiBold"
-                       Foreground="White"/>
+                Padding="16,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Title + optional step indicator -->
+                <StackPanel Grid.Column="0" Orientation="Vertical" VerticalAlignment="Center">
+                    <TextBlock Text="Grid Builder"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Foreground="White"/>
+                    <TextBlock Text="{Binding StepIndicatorText}"
+                               FontSize="10"
+                               Foreground="#A0C8E8"
+                               Margin="0,2,0,0"
+                               Visibility="{Binding ShowStepIndicator, Converter={StaticResource BoolToVis}}"/>
+                </StackPanel>
+
+                <!-- Building Builder toggle -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Building Builder"
+                               FontSize="11"
+                               Foreground="#CCCCCC"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <CheckBox IsChecked="{Binding IsBuildingBuilderEnabled, Mode=TwoWay}"
+                              VerticalAlignment="Center"
+                              ToolTip="Enable multi-step Building Builder (Grid → Level → Structure)"/>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <!-- ══ Footer (docked to bottom so it stays visible on resize) ═══ -->
@@ -184,7 +211,7 @@
                     <Button Content="Cancel"
                             Command="{Binding CancelCommand}"
                             Margin="0,0,8,0"/>
-                    <Button Content="Create Grids"
+                    <Button Content="{Binding PrimaryButtonText}"
                             Command="{Binding CreateGridsCommand}"
                             Style="{StaticResource PrimaryButton}"/>
                 </StackPanel>

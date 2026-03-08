@@ -66,5 +66,18 @@ namespace GridBuilderAddin
 
         /// <summary>Suffix appended to grid names that collide with existing element names.</summary>
         public const string CollisionSuffix = "_new";
+
+        // ── Level Builder ───────────────────────────────────────────────────
+
+        /// <summary>Default floor-to-floor height in millimetres applied to new levels at startup.</summary>
+        public const double DefaultFloorToFloorMm = 4000.0;
+
+        /// <summary>Name of the Revit transaction used when creating or modifying levels.</summary>
+        public const string LevelTransactionName = "Create/Modify Levels";
+
+        // ── Structure Builder ───────────────────────────────────────────────
+
+        /// <summary>Name of the Revit transaction used when building the base structure.</summary>
+        public const string StructureTransactionName = "Build Base Structure";
     }
 }
