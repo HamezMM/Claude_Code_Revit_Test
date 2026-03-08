@@ -79,5 +79,17 @@ namespace GridBuilderAddin
 
         /// <summary>Name of the Revit transaction used when building the base structure.</summary>
         public const string StructureTransactionName = "Build Base Structure";
+
+        /// <summary>Name of the Revit transaction used when creating the floor slab.</summary>
+        public const string FloorTransactionName = "Build Floor Slab";
+
+        /// <summary>Name of the Revit transaction used when creating exterior walls.</summary>
+        public const string WallsTransactionName = "Build Exterior Walls";
+
+        /// <summary>Name of the Revit transaction used when creating the roof.</summary>
+        public const string RoofTransactionName = "Build Roof";
+
+        /// <summary>Name of the Revit transaction used when placing structural columns.</summary>
+        public const string ColumnsTransactionName = "Build Structural Columns";
     }
 }

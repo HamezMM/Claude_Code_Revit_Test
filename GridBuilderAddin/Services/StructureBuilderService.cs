@@ -19,6 +19,9 @@ namespace GridBuilderAddin.Services
     /// <list type="bullet">
     ///   <item>Fetching available floor, wall, roof, and structural column family types.</item>
     ///   <item>Creating the main slab, exterior walls, roof, and structural columns.</item>
+    ///   <item>Each element category is placed in its own transaction so that a failure
+    ///         in a later step (e.g. columns) does not roll back already-committed work
+    ///         (e.g. floor and walls).</item>
     /// </list>
     /// This class has no WPF dependency and no UI logic.
     /// </summary>
@@ -162,13 +165,14 @@ namespace GridBuilderAddin.Services
         /// <summary>
         /// Creates the base structure elements (slab, exterior walls, roof, and structural columns)
         /// described by <paramref name="config"/> in the active Revit document.
-        /// All element creation is wrapped in a single transaction named
-        /// <see cref="GridBuilderConstants.StructureTransactionName"/>.
+        /// Each element category is placed inside its own independent transaction so that a
+        /// failure in a later step does not roll back the work already committed by earlier steps.
         /// </summary>
         /// <param name="doc">The active Revit document.</param>
         /// <param name="gridConfig">Grid configuration from the Grid Builder step.</param>
         /// <param name="config">Structure configuration from the Structure Builder dialog.</param>
-        /// <returns><c>true</c> if the transaction committed; <c>false</c> on error.</returns>
+        /// <returns><c>true</c> if all four transactions committed; <c>false</c> if any step failed
+        /// (an error dialog has already been shown identifying the failing step).</returns>
         public bool BuildStructure(Document doc, GridConfig gridConfig, StructureConfig config)
         {
             if (doc        == null) throw new ArgumentNullException(nameof(doc));
@@ -228,51 +232,165 @@ namespace GridBuilderAddin.Services
             double floorYMax = y1 + wallOffsetFt - wallThickFt;  // northernmost (most positive y)
             double floorYMin = yM - wallOffsetFt + wallThickFt;  // southernmost (most negative y)
 
-            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
-            var transaction = new Transaction(doc, GridBuilderConstants.StructureTransactionName);
+            // ── Transaction 1: Floor ─────────────────────────────────────────
+            if (!ExecuteFloor(doc, config, floorTypeId, floorLevelId,
+                              floorXMin, floorXMax, floorYMin, floorYMax))
+                return false;
 
+            // ── Transaction 2: Exterior walls ────────────────────────────────
+            if (!ExecuteExteriorWalls(doc, config, wallTypeId, wallBotLvlId, wallBotOffFt,
+                                      wallTopLvlId, wallTopOffFt,
+                                      x1, xN, y1, yM, wallOffsetFt))
+                return false;
+
+            // ── Transaction 3: Roof ──────────────────────────────────────────
+            if (!ExecuteRoof(doc, config, roofTypeId, roofLevelId,
+                             floorXMin, floorXMax, floorYMin, floorYMax))
+                return false;
+
+            // ── Transaction 4: Structural columns ────────────────────────────
+            if (!ExecuteColumns(doc, config, colBotLvlId, colBotOffFt, colTopLvlId, colTopOffFt,
+                                xPositions, yMagnitudes, perimOffFt))
+                return false;
+
+            Debug.WriteLine("[StructureBuilder] All structure transactions committed successfully.");
+            return true;
+        }
+
+        // ── Per-step transaction wrappers ────────────────────────────────────
+        // Each method runs its element-creation helper inside its own transaction.
+        // If the helper throws, the transaction is rolled back and a TaskDialog is shown
+        // identifying exactly which step failed, leaving all previously committed steps intact.
+
+        private static bool ExecuteFloor(
+            Document doc, StructureConfig config,
+            ElementId floorTypeId, ElementId levelId,
+            double xMin, double xMax, double yMin, double yMax)
+        {
+            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
+            var transaction = new Transaction(doc, GridBuilderConstants.FloorTransactionName);
             try
             {
                 transaction.Start();
-                Debug.WriteLine("[StructureBuilder] Transaction started.");
-
-                // ── Floor ────────────────────────────────────────────────────
-                CreateFloor(doc, config, floorTypeId, floorLevelId, floorXMin, floorXMax, floorYMin, floorYMax);
-
-                // ── Exterior walls ────────────────────────────────────────────
-                CreateExteriorWalls(
-                    doc, config, wallTypeId, wallBotLvlId, wallBotOffFt, wallTopLvlId, wallTopOffFt,
-                    x1, xN, y1, yM, wallOffsetFt);
-
-                // ── Roof ─────────────────────────────────────────────────────
-                CreateRoof(doc, config, roofTypeId, roofLevelId, floorXMin, floorXMax, floorYMin, floorYMax);
-
-                // ── Structural columns ────────────────────────────────────────
-                CreateColumns(
-                    doc, config, colBotLvlId, colBotOffFt, colTopLvlId, colTopOffFt,
-                    xPositions, yMagnitudes, perimOffFt);
-
+                CreateFloor(doc, config, floorTypeId, levelId, xMin, xMax, yMin, yMax);
                 transaction.Commit();
-                Debug.WriteLine("[StructureBuilder] Transaction committed successfully.");
+                Debug.WriteLine("[StructureBuilder] Floor transaction committed.");
                 return true;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[StructureBuilder] Exception during structure creation: {ex.Message}");
-
+                Debug.WriteLine($"[StructureBuilder] Floor transaction failed: {ex.Message}");
                 if (transaction.HasStarted() && !transaction.HasEnded())
                     transaction.RollBack();
 
-                // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
                 TaskDialog.Show(
-                    "Structure Builder — Error",
-                    $"An error occurred while building the structure.\n\nDetails:\n{ex.Message}");
-
+                    "Structure Builder — Floor Error",
+                    $"Failed to create the floor slab.\n\n" +
+                    $"Check that the selected floor type and host level are valid.\n\n" +
+                    $"Details:\n{ex.Message}");
                 return false;
             }
         }
 
-        // ── Private helpers ──────────────────────────────────────────────────
+        private static bool ExecuteExteriorWalls(
+            Document doc, StructureConfig config,
+            ElementId wallTypeId, ElementId botLvlId, double botOffFt,
+            ElementId topLvlId, double topOffFt,
+            double x1, double xN, double y1, double yM, double wallOffsetFt)
+        {
+            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
+            var transaction = new Transaction(doc, GridBuilderConstants.WallsTransactionName);
+            try
+            {
+                transaction.Start();
+                CreateExteriorWalls(doc, config, wallTypeId, botLvlId, botOffFt, topLvlId, topOffFt,
+                                    x1, xN, y1, yM, wallOffsetFt);
+                transaction.Commit();
+                Debug.WriteLine("[StructureBuilder] Exterior walls transaction committed.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[StructureBuilder] Exterior walls transaction failed: {ex.Message}");
+                if (transaction.HasStarted() && !transaction.HasEnded())
+                    transaction.RollBack();
+
+                TaskDialog.Show(
+                    "Structure Builder — Exterior Walls Error",
+                    $"Failed to create one or more exterior walls.\n\n" +
+                    $"Check that the selected wall type and level constraints are valid, " +
+                    $"and that the wall height (top level − bottom level) is greater than zero.\n\n" +
+                    $"Details:\n{ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool ExecuteRoof(
+            Document doc, StructureConfig config,
+            ElementId roofTypeId, ElementId levelId,
+            double xMin, double xMax, double yMin, double yMax)
+        {
+            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
+            var transaction = new Transaction(doc, GridBuilderConstants.RoofTransactionName);
+            try
+            {
+                transaction.Start();
+                CreateRoof(doc, config, roofTypeId, levelId, xMin, xMax, yMin, yMax);
+                transaction.Commit();
+                Debug.WriteLine("[StructureBuilder] Roof transaction committed.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[StructureBuilder] Roof transaction failed: {ex.Message}");
+                if (transaction.HasStarted() && !transaction.HasEnded())
+                    transaction.RollBack();
+
+                TaskDialog.Show(
+                    "Structure Builder — Roof Error",
+                    $"Failed to create the roof.\n\n" +
+                    $"Check that the selected roof type and host level are valid.\n\n" +
+                    $"Details:\n{ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool ExecuteColumns(
+            Document doc, StructureConfig config,
+            ElementId colBotLvlId, double colBotOffFt,
+            ElementId colTopLvlId, double colTopOffFt,
+            List<double> xPositions, List<double> yMagnitudes, double perimOffFt)
+        {
+            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
+            var transaction = new Transaction(doc, GridBuilderConstants.ColumnsTransactionName);
+            try
+            {
+                transaction.Start();
+                CreateColumns(doc, config, colBotLvlId, colBotOffFt, colTopLvlId, colTopOffFt,
+                              xPositions, yMagnitudes, perimOffFt);
+                transaction.Commit();
+                Debug.WriteLine("[StructureBuilder] Columns transaction committed.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[StructureBuilder] Columns transaction failed: {ex.Message}");
+                if (transaction.HasStarted() && !transaction.HasEnded())
+                    transaction.RollBack();
+
+                TaskDialog.Show(
+                    "Structure Builder — Structural Columns Error",
+                    $"Failed to place one or more structural columns.\n\n" +
+                    $"Check that the selected column family types are loaded and activated, " +
+                    $"and that the base and top levels are valid.\n\n" +
+                    $"Details:\n{ex.Message}");
+                return false;
+            }
+        }
+
+        // ── Private element-creation helpers ────────────────────────────────
+        // These helpers contain the Revit API calls and are called from within
+        // the per-step transaction wrappers above.
 
         private static void CreateFloor(
             Document doc, StructureConfig config,
@@ -292,6 +410,11 @@ namespace GridBuilderAddin.Services
             // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
             // Floor.Create(Document, IList<CurveLoop>, ElementId, ElementId) — revitapidocs.com/2024/
             var floor = Floor.Create(doc, new List<CurveLoop> { loop }, floorTypeId, levelId);
+
+            if (floor == null)
+                throw new InvalidOperationException(
+                    "Floor.Create returned null. " +
+                    "The floor type or host level may be invalid or incompatible with the current document.");
 
             // Set height offset from level
             // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
@@ -349,6 +472,13 @@ namespace GridBuilderAddin.Services
                 // — revitapidocs.com/2024/
                 var wall = Wall.Create(doc, line, wallTypeId, botLvlId, heightFt, botOffFt, flip, true);
 
+                if (wall == null)
+                    throw new InvalidOperationException(
+                        $"Wall.Create returned null for the wall at " +
+                        $"({line.GetEndPoint(0).X:F2}, {line.GetEndPoint(0).Y:F2}) → " +
+                        $"({line.GetEndPoint(1).X:F2}, {line.GetEndPoint(1).Y:F2}). " +
+                        $"The wall type or level constraints may be invalid.");
+
                 // Set top constraint to the selected top level
                 // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
                 // BuiltInParameter.WALL_HEIGHT_TYPE — revitapidocs.com/2024/
@@ -369,11 +499,15 @@ namespace GridBuilderAddin.Services
             var roofType  = doc.GetElement(roofTypeId) as RoofType;
             var roofLevel = doc.GetElement(levelId) as Level;
 
-            if (roofType == null || roofLevel == null)
-            {
-                Debug.WriteLine("[StructureBuilder] Roof type or level not found — skipping roof.");
-                return;
-            }
+            if (roofType == null)
+                throw new InvalidOperationException(
+                    "The selected roof type could not be found in the document (ElementId may be stale). " +
+                    "Please re-open the Structure Builder and re-select the roof type.");
+
+            if (roofLevel == null)
+                throw new InvalidOperationException(
+                    "The selected roof host level could not be found in the document (ElementId may be stale). " +
+                    "Please re-open the Structure Builder and re-select the roof level.");
 
             // Build a flat footprint roof using CurveArray
             // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
@@ -387,6 +521,11 @@ namespace GridBuilderAddin.Services
 
             ModelCurveArray roofProfile;
             var roof = doc.Create.NewFootPrintRoof(curveArray, roofLevel, roofType, out roofProfile);
+
+            if (roof == null)
+                throw new InvalidOperationException(
+                    "NewFootPrintRoof returned null. " +
+                    "The roof type or host level may be incompatible with the boundary sketch.");
 
             // Set level offset and ensure zero slope for a flat roof
             // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
@@ -417,74 +556,83 @@ namespace GridBuilderAddin.Services
             int yFirst = 0, yLast = yCount - 1;
 
             var botLevel = doc.GetElement(botLvlId) as Level;
-            if (botLevel == null) { Debug.WriteLine("[StructureBuilder] Column base level not found — skipping columns."); return; }
+            if (botLevel == null)
+                throw new InvalidOperationException(
+                    "The column base level could not be found in the document. " +
+                    "Please re-open the Structure Builder and re-select the column base level.");
 
             // ── Perimeter columns ─────────────────────────────────────────────
             if (config.HasPerimeterColumns && config.PerimeterColumnTypeId != 0)
             {
                 var symbol = doc.GetElement(new ElementId(config.PerimeterColumnTypeId)) as FamilySymbol;
-                if (symbol != null)
+                if (symbol == null)
+                    throw new InvalidOperationException(
+                        $"Perimeter column family symbol (ID {config.PerimeterColumnTypeId}) could not be found. " +
+                        $"Ensure the column family is loaded in the document.");
+
+                // Activate symbol if not already active
+                // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
+                // FamilySymbol.Activate() — revitapidocs.com/2024/
+                if (!symbol.IsActive) symbol.Activate();
+
+                // Perimeter intersections: all (xi, yj) where xi is first or last OR yj is first or last
+                for (int xi = 0; xi < xCount; xi++)
                 {
-                    // Activate symbol if not already active
-                    // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
-                    // FamilySymbol.Activate() — revitapidocs.com/2024/
-                    if (!symbol.IsActive) symbol.Activate();
-
-                    // Perimeter intersections: all (xi, yj) where xi is first or last OR yj is first or last
-                    for (int xi = 0; xi < xCount; xi++)
+                    for (int yj = 0; yj < yCount; yj++)
                     {
-                        for (int yj = 0; yj < yCount; yj++)
-                        {
-                            bool isPerimeter = (xi == xFirst || xi == xLast || yj == yFirst || yj == yLast);
-                            if (!isPerimeter) continue;
+                        bool isPerimeter = (xi == xFirst || xi == xLast || yj == yFirst || yj == yLast);
+                        if (!isPerimeter) continue;
 
-                            double x = xPositions[xi];
-                            double y = -yMagnitudes[yj];
+                        double x = xPositions[xi];
+                        double y = -yMagnitudes[yj];
 
-                            // Apply interior offset inward from perimeter grid
-                            double px = ApplyPerimXOffset(x, xi, xFirst, xLast, perimOffFt);
-                            double py = ApplyPerimYOffset(y, yj, yFirst, yLast, perimOffFt);
+                        // Apply interior offset inward from perimeter grid
+                        double px = ApplyPerimXOffset(x, xi, xFirst, xLast, perimOffFt);
+                        double py = ApplyPerimYOffset(y, yj, yFirst, yLast, perimOffFt);
 
-                            PlaceColumn(doc, symbol, botLevel, botOffFt, topLvlId, topOffFt, new XYZ(px, py, 0));
-                        }
+                        PlaceColumn(doc, symbol, botLevel, botOffFt, topLvlId, topOffFt, new XYZ(px, py, 0));
                     }
-                    Debug.WriteLine("[StructureBuilder] Perimeter columns placed.");
                 }
+                Debug.WriteLine("[StructureBuilder] Perimeter columns placed.");
             }
 
             // ── Midpoint perimeter columns ────────────────────────────────────
             if (config.HasMidpointColumns && config.MidpointColumnTypeId != 0)
             {
                 var symbol = doc.GetElement(new ElementId(config.MidpointColumnTypeId)) as FamilySymbol;
-                if (symbol != null)
-                {
-                    if (!symbol.IsActive) symbol.Activate();
+                if (symbol == null)
+                    throw new InvalidOperationException(
+                        $"Midpoint column family symbol (ID {config.MidpointColumnTypeId}) could not be found. " +
+                        $"Ensure the column family is loaded in the document.");
 
-                    PlaceMidpointColumns(doc, symbol, botLevel, botOffFt, topLvlId, topOffFt,
-                        xPositions, yMagnitudes, perimOffFt, xFirst, xLast, yFirst, yLast);
-                    Debug.WriteLine("[StructureBuilder] Midpoint perimeter columns placed.");
-                }
+                if (!symbol.IsActive) symbol.Activate();
+
+                PlaceMidpointColumns(doc, symbol, botLevel, botOffFt, topLvlId, topOffFt,
+                    xPositions, yMagnitudes, perimOffFt, xFirst, xLast, yFirst, yLast);
+                Debug.WriteLine("[StructureBuilder] Midpoint perimeter columns placed.");
             }
 
             // ── Interior columns ──────────────────────────────────────────────
             if (config.HasInteriorColumns && config.InteriorColumnTypeId != 0)
             {
                 var symbol = doc.GetElement(new ElementId(config.InteriorColumnTypeId)) as FamilySymbol;
-                if (symbol != null)
-                {
-                    if (!symbol.IsActive) symbol.Activate();
+                if (symbol == null)
+                    throw new InvalidOperationException(
+                        $"Interior column family symbol (ID {config.InteriorColumnTypeId}) could not be found. " +
+                        $"Ensure the column family is loaded in the document.");
 
-                    for (int xi = 1; xi < xCount - 1; xi++)
+                if (!symbol.IsActive) symbol.Activate();
+
+                for (int xi = 1; xi < xCount - 1; xi++)
+                {
+                    for (int yj = 1; yj < yCount - 1; yj++)
                     {
-                        for (int yj = 1; yj < yCount - 1; yj++)
-                        {
-                            double x = xPositions[xi];
-                            double y = -yMagnitudes[yj];
-                            PlaceColumn(doc, symbol, botLevel, botOffFt, topLvlId, topOffFt, new XYZ(x, y, 0));
-                        }
+                        double x = xPositions[xi];
+                        double y = -yMagnitudes[yj];
+                        PlaceColumn(doc, symbol, botLevel, botOffFt, topLvlId, topOffFt, new XYZ(x, y, 0));
                     }
-                    Debug.WriteLine("[StructureBuilder] Interior columns placed.");
                 }
+                Debug.WriteLine("[StructureBuilder] Interior columns placed.");
             }
         }
 
@@ -499,6 +647,12 @@ namespace GridBuilderAddin.Services
             // — revitapidocs.com/2024/
             var col = doc.Create.NewFamilyInstance(
                 point, symbol, botLevel, StructuralType.Column);
+
+            if (col == null)
+                throw new InvalidOperationException(
+                    $"NewFamilyInstance returned null for column at ({point.X:F2}, {point.Y:F2}). " +
+                    $"The column family symbol '{symbol.Name}' may not be fully activated or may be " +
+                    $"incompatible with the selected base level.");
 
             // Set base offset
             // API unverified — check https://www.revitapidocs.com/2024/ before compiling.

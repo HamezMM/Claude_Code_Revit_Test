@@ -388,45 +388,42 @@
                         <!-- ── Perimeter columns sub-card ─────────────────── -->
                         <Border Style="{StaticResource SubCard}">
                             <StackPanel>
-                                <CheckBox Content="Perimeter Columns  (at each perimeter grid intersection)"
-                                          IsChecked="{Binding HasPerimeterColumns, Mode=TwoWay}"
-                                          FontSize="12"
-                                          FontWeight="SemiBold"
-                                          Margin="0,0,0,6"/>
+                                <TextBlock Text="Perimeter Columns  (at each perimeter grid intersection)"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,6"/>
 
-                                <StackPanel Visibility="{Binding HasPerimeterColumns, Converter={StaticResource BoolToVis}}">
-                                    <Grid Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="130"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Column Type" Style="{StaticResource FieldLabel}"/>
-                                        <ComboBox Grid.Column="1"
-                                                  ItemsSource="{Binding ColumnTypes}"
-                                                  SelectedItem="{Binding PerimeterColumnType, Mode=TwoWay}"
-                                                  DisplayMemberPath="DisplayName"/>
-                                    </Grid>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Column Type" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox Grid.Column="1"
+                                              ItemsSource="{Binding ColumnTypes}"
+                                              SelectedItem="{Binding PerimeterColumnType, Mode=TwoWay}"
+                                              DisplayMemberPath="DisplayName"/>
+                                </Grid>
 
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="130"/>
-                                            <ColumnDefinition Width="90"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0"
-                                                   Text="Interior Offset"
-                                                   Style="{StaticResource FieldLabel}"
-                                                   ToolTip="Distance column centerline is offset inward from the perimeter grid line (≥ 0)"/>
-                                        <TextBox Grid.Column="1"
-                                                 Text="{Binding PerimeterOffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                                        <TextBlock Grid.Column="2" Text=" mm" FontSize="11" Foreground="#666"
-                                                   VerticalAlignment="Center" Margin="3,0,0,0"/>
-                                        <TextBlock Grid.Column="3" Text="(from grid line, ≥ 0)"
-                                                   FontSize="10" Foreground="#999"
-                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    </Grid>
-                                </StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="Interior Offset"
+                                               Style="{StaticResource FieldLabel}"
+                                               ToolTip="Distance column centerline is offset inward from the perimeter grid line (≥ 0)"/>
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding PerimeterOffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Grid.Column="2" Text=" mm" FontSize="11" Foreground="#666"
+                                               VerticalAlignment="Center" Margin="3,0,0,0"/>
+                                    <TextBlock Grid.Column="3" Text="(from grid line, ≥ 0)"
+                                               FontSize="10" Foreground="#999"
+                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </Grid>
                             </StackPanel>
                         </Border>
 
@@ -458,25 +455,22 @@
                         <!-- ── Interior columns sub-card ──────────────────── -->
                         <Border Style="{StaticResource SubCard}">
                             <StackPanel>
-                                <CheckBox Content="Interior Field Columns  (at all non-perimeter grid intersections)"
-                                          IsChecked="{Binding HasInteriorColumns, Mode=TwoWay}"
-                                          FontSize="12"
-                                          FontWeight="SemiBold"
-                                          Margin="0,0,0,6"/>
+                                <TextBlock Text="Interior Field Columns  (at all non-perimeter grid intersections)"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,6"/>
 
-                                <StackPanel Visibility="{Binding HasInteriorColumns, Converter={StaticResource BoolToVis}}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="130"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Column Type" Style="{StaticResource FieldLabel}"/>
-                                        <ComboBox Grid.Column="1"
-                                                  ItemsSource="{Binding ColumnTypes}"
-                                                  SelectedItem="{Binding InteriorColumnType, Mode=TwoWay}"
-                                                  DisplayMemberPath="DisplayName"/>
-                                    </Grid>
-                                </StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Column Type" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox Grid.Column="1"
+                                              ItemsSource="{Binding ColumnTypes}"
+                                              SelectedItem="{Binding InteriorColumnType, Mode=TwoWay}"
+                                              DisplayMemberPath="DisplayName"/>
+                                </Grid>
                             </StackPanel>
                         </Border>
 
