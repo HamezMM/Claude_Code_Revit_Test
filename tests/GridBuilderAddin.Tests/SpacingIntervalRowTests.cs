@@ -265,6 +265,93 @@ namespace GridBuilderAddin.Tests
             Assert.Equal("0",     row.InchesText);
         }
 
+        // ── IsManualOverride ──────────────────────────────────────────────────
+
+        [Fact]
+        public void Constructor_IsManualOverride_False()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            Assert.False(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void SpacingText_Setter_SetsIsManualOverride_True()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SpacingText = "5000";
+            Assert.True(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void FeetText_Setter_SetsIsManualOverride_True()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000, GridUnitMode.FeetAndInches);
+            row.FeetText = "10";
+            Assert.True(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void InchesText_Setter_SetsIsManualOverride_True()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000, GridUnitMode.FeetAndInches);
+            row.InchesText = "6";
+            Assert.True(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void SetFromMm_DoesNotSetIsManualOverride()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SetFromMm(5000);
+            Assert.False(row.IsManualOverride);
+        }
+
+        // ── ResetToDefault ────────────────────────────────────────────────────
+
+        [Fact]
+        public void ResetToDefault_ClearsIsManualOverride()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SpacingText = "5000";  // makes IsManualOverride = true
+            Assert.True(row.IsManualOverride);
+
+            row.ResetToDefault(8000);
+            Assert.False(row.IsManualOverride);
+        }
+
+        [Fact]
+        public void ResetToDefault_UpdatesSpacingText()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000);
+            row.SpacingText = "5000";
+
+            row.ResetToDefault(7000);
+            Assert.Equal("7000", row.SpacingText);
+        }
+
+        [Fact]
+        public void ResetToDefault_UpdatesFtInFields()
+        {
+            var row = new SpacingIntervalRow("1 → 2", 8000, GridUnitMode.FeetAndInches);
+            row.FeetText = "10";
+
+            row.ResetToDefault(304.8);   // 1 ft 0 in
+            Assert.Equal("1",  row.FeetText);
+            Assert.Equal("0",  row.InchesText);
+        }
+
+        [Fact]
+        public void ResetToDefault_RaisesPropertyChanged_ForIsManualOverride()
+        {
+            var row         = new SpacingIntervalRow("1 → 2", 8000);
+            row.SpacingText = "5000";
+            var raisedNames = new List<string?>();
+            row.PropertyChanged += (_, e) => raisedNames.Add(e.PropertyName);
+
+            row.ResetToDefault(8000);
+            Assert.Contains(nameof(row.IsManualOverride), raisedNames);
+        }
+
         // ── INotifyPropertyChanged ────────────────────────────────────────────
 
         [Fact]

@@ -13,8 +13,8 @@ namespace GridBuilderAddin.Tests
 {
     /// <summary>
     /// Verifies <see cref="GridBuilderViewModel"/> validation rules,
-    /// spacing row collection management, unit-mode switching, and
-    /// <see cref="GridBuilderViewModel.BuildConfig"/>.
+    /// spacing row collection management, unit-mode switching, refresh commands,
+    /// dimension annotation helpers, and <see cref="GridBuilderViewModel.BuildConfig"/>.
     /// </summary>
     public class GridBuilderViewModelTests
     {
@@ -73,6 +73,14 @@ namespace GridBuilderAddin.Tests
             Assert.False(vm.IsFtInMode);
         }
 
+        [Fact]
+        public void Constructor_AllRows_IsManualOverride_False()
+        {
+            var vm = new GridBuilderViewModel();
+            Assert.All(vm.XSpacingRows, r => Assert.False(r.IsManualOverride));
+            Assert.All(vm.YSpacingRows, r => Assert.False(r.IsManualOverride));
+        }
+
         // ── X/Y count validation ─────────────────────────────────────────────
 
         [Fact]
@@ -117,27 +125,45 @@ namespace GridBuilderAddin.Tests
             Assert.Contains(GridBuilderConstants.MinGridCount.ToString(), vm.ValidationMessage);
         }
 
-        // ── Default spacing validation ────────────────────────────────────────
+        // ── Default spacing validation (X and Y independent) ─────────────────
 
         [Fact]
-        public void IsValid_False_WhenDefaultSpacingIsZero()
+        public void IsValid_False_WhenXDefaultSpacingIsZero()
         {
-            var vm = new GridBuilderViewModel { DefaultSpacingText = "0" };
+            var vm = new GridBuilderViewModel { XDefaultSpacingText = "0" };
             Assert.False(vm.IsValid);
         }
 
         [Fact]
-        public void IsValid_False_WhenDefaultSpacingIsNegative()
+        public void IsValid_False_WhenYDefaultSpacingIsZero()
         {
-            var vm = new GridBuilderViewModel { DefaultSpacingText = "-1000" };
+            var vm = new GridBuilderViewModel { YDefaultSpacingText = "0" };
             Assert.False(vm.IsValid);
         }
 
         [Fact]
-        public void IsValid_False_WhenDefaultSpacingIsNonNumeric()
+        public void IsValid_False_WhenXDefaultSpacingIsNegative()
         {
-            var vm = new GridBuilderViewModel { DefaultSpacingText = "???" };
+            var vm = new GridBuilderViewModel { XDefaultSpacingText = "-1000" };
             Assert.False(vm.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_False_WhenXDefaultSpacingIsNonNumeric()
+        {
+            var vm = new GridBuilderViewModel { XDefaultSpacingText = "???" };
+            Assert.False(vm.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_True_WhenXAndYDefaultSpacingsAreIndependentlySet()
+        {
+            var vm = new GridBuilderViewModel
+            {
+                XDefaultSpacingText = "6000",
+                YDefaultSpacingText = "9000"
+            };
+            Assert.True(vm.IsValid);
         }
 
         // ── Spacing row override validation ───────────────────────────────────
@@ -169,6 +195,16 @@ namespace GridBuilderAddin.Tests
             Assert.True(vm.IsValid);
         }
 
+        [Fact]
+        public void SpacingText_Setter_SetsIsManualOverride_True()
+        {
+            var vm = new GridBuilderViewModel();
+            Assert.False(vm.XSpacingRows[0].IsManualOverride);
+
+            vm.XSpacingRows[0].SpacingText = "6000";
+            Assert.True(vm.XSpacingRows[0].IsManualOverride);
+        }
+
         // ── Row collection rebuild on count change ────────────────────────────
 
         [Fact]
@@ -197,6 +233,30 @@ namespace GridBuilderAddin.Tests
         }
 
         [Fact]
+        public void XSpacingRows_NewRows_PreFilledWithXDefault_NotYDefault()
+        {
+            var vm = new GridBuilderViewModel
+            {
+                XDefaultSpacingText = "6000",
+                YDefaultSpacingText = "9000"
+            };
+            vm.XCountText = "5";  // triggers rebuild
+            Assert.All(vm.XSpacingRows, r => Assert.Equal(6000.0, r.ValueMm));
+        }
+
+        [Fact]
+        public void YSpacingRows_NewRows_PreFilledWithYDefault_NotXDefault()
+        {
+            var vm = new GridBuilderViewModel
+            {
+                XDefaultSpacingText = "6000",
+                YDefaultSpacingText = "9000"
+            };
+            vm.YCountText = "5";  // triggers rebuild
+            Assert.All(vm.YSpacingRows, r => Assert.Equal(9000.0, r.ValueMm));
+        }
+
+        [Fact]
         public void XSpacingRows_Labels_FollowNumericalIntervalPattern()
         {
             var vm = new GridBuilderViewModel();
@@ -218,6 +278,73 @@ namespace GridBuilderAddin.Tests
             Assert.Contains("B", vm.YSpacingRows[0].Label);
             Assert.Contains("B", vm.YSpacingRows[1].Label);
             Assert.Contains("C", vm.YSpacingRows[1].Label);
+        }
+
+        // ── Refresh commands ──────────────────────────────────────────────────
+
+        [Fact]
+        public void RefreshXDefault_UpdatesNonOverriddenRows()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.XDefaultSpacingText = "6000";
+
+            vm.RefreshXDefaultCommand.Execute(null);
+
+            Assert.All(vm.XSpacingRows, r => Assert.Equal(6000.0, r.ValueMm));
+        }
+
+        [Fact]
+        public void RefreshXDefault_SkipsManuallyOverriddenRows()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.XSpacingRows[0].SpacingText = "5000";  // manual override — IsManualOverride = true
+
+            vm.XDefaultSpacingText = "6000";
+            vm.RefreshXDefaultCommand.Execute(null);
+
+            // Row 0 was manually set — must NOT be touched by refresh
+            Assert.Equal(5000.0, vm.XSpacingRows[0].ValueMm);
+            // Other rows (not manually changed) should be updated
+            for (int i = 1; i < vm.XSpacingRows.Count; i++)
+                Assert.Equal(6000.0, vm.XSpacingRows[i].ValueMm);
+        }
+
+        [Fact]
+        public void RefreshYDefault_UpdatesNonOverriddenRows()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.YDefaultSpacingText = "7000";
+
+            vm.RefreshYDefaultCommand.Execute(null);
+
+            Assert.All(vm.YSpacingRows, r => Assert.Equal(7000.0, r.ValueMm));
+        }
+
+        [Fact]
+        public void RefreshYDefault_SkipsManuallyOverriddenRows()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.YSpacingRows[0].SpacingText = "4000";  // manual override
+
+            vm.YDefaultSpacingText = "7000";
+            vm.RefreshYDefaultCommand.Execute(null);
+
+            Assert.Equal(4000.0, vm.YSpacingRows[0].ValueMm);
+            for (int i = 1; i < vm.YSpacingRows.Count; i++)
+                Assert.Equal(7000.0, vm.YSpacingRows[i].ValueMm);
+        }
+
+        [Fact]
+        public void RefreshXDefault_DoesNotAffectYRows()
+        {
+            var vm = new GridBuilderViewModel();
+            var yValuesBefore = vm.YSpacingRows.Select(r => r.ValueMm).ToList();
+
+            vm.XDefaultSpacingText = "6000";
+            vm.RefreshXDefaultCommand.Execute(null);
+
+            var yValuesAfter = vm.YSpacingRows.Select(r => r.ValueMm).ToList();
+            Assert.Equal(yValuesBefore, yValuesAfter);
         }
 
         // ── Unit mode switching ───────────────────────────────────────────────
@@ -291,10 +418,22 @@ namespace GridBuilderAddin.Tests
         public void UnitMode_Switch_ConvertsMmToFtIn_PreservesRoundtripValue()
         {
             var vm = new GridBuilderViewModel();
-            // Default is 8000 mm; after switch to ft-in, ValueMm should still be 8000 (approximately)
             var originalMm = vm.XSpacingRows[0].ValueMm;
             vm.UnitMode = GridUnitMode.FeetAndInches;
             Assert.Equal(originalMm, vm.XSpacingRows[0].ValueMm, precision: 0);
+        }
+
+        [Fact]
+        public void UnitMode_Switch_ConvertsXAndYDefaultsIndependently()
+        {
+            var vm = new GridBuilderViewModel
+            {
+                XDefaultSpacingText = "6000",
+                YDefaultSpacingText = "9000"
+            };
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            // Both defaults should convert correctly — X ≠ Y
+            Assert.NotEqual(vm.XDefaultFeetText, vm.YDefaultFeetText);
         }
 
         [Fact]
@@ -336,32 +475,44 @@ namespace GridBuilderAddin.Tests
         // ── Default spacing ft-in validation ──────────────────────────────────
 
         [Fact]
-        public void IsValid_False_WhenInFtInMode_And_DefaultFeetAndInches_AreZero()
+        public void IsValid_False_WhenInFtInMode_And_XDefaultFeetAndInches_AreZero()
         {
             var vm = new GridBuilderViewModel();
-            vm.UnitMode = GridUnitMode.FeetAndInches;
-            vm.DefaultFeetText   = "0";
-            vm.DefaultInchesText = "0";
+            vm.UnitMode          = GridUnitMode.FeetAndInches;
+            vm.XDefaultFeetText   = "0";
+            vm.XDefaultInchesText = "0";
             Assert.False(vm.IsValid);
         }
 
         [Fact]
-        public void IsValid_True_WhenInFtInMode_And_DefaultSpacingIsValid()
+        public void IsValid_False_WhenInFtInMode_And_YDefaultFeetAndInches_AreZero()
+        {
+            var vm = new GridBuilderViewModel();
+            vm.UnitMode          = GridUnitMode.FeetAndInches;
+            vm.YDefaultFeetText   = "0";
+            vm.YDefaultInchesText = "0";
+            Assert.False(vm.IsValid);
+        }
+
+        [Fact]
+        public void IsValid_True_WhenInFtInMode_And_BothDefaultsAreValid()
         {
             var vm = new GridBuilderViewModel();
             vm.UnitMode = GridUnitMode.FeetAndInches;
-            vm.DefaultFeetText   = "26";
-            vm.DefaultInchesText = "3";
+            vm.XDefaultFeetText   = "26";
+            vm.XDefaultInchesText = "3";
+            vm.YDefaultFeetText   = "20";
+            vm.YDefaultInchesText = "0";
             Assert.True(vm.IsValid);
         }
 
         [Fact]
-        public void IsValid_False_WhenInFtInMode_And_DefaultInchesIs12OrMore()
+        public void IsValid_False_WhenInFtInMode_And_XDefaultInchesIs12OrMore()
         {
             var vm = new GridBuilderViewModel();
             vm.UnitMode = GridUnitMode.FeetAndInches;
-            vm.DefaultFeetText   = "1";
-            vm.DefaultInchesText = "12";
+            vm.XDefaultFeetText   = "1";
+            vm.XDefaultInchesText = "12";
             Assert.False(vm.IsValid);
         }
 
@@ -413,11 +564,9 @@ namespace GridBuilderAddin.Tests
         }
 
         [Fact]
-        public void BuildConfig_DefaultSpacingMm_MatchesDefaultSpacingText()
+        public void BuildConfig_DefaultSpacingMm_MatchesXDefaultSpacingText()
         {
-            var vm = new GridBuilderViewModel { DefaultSpacingText = "7500" };
-            // Rebuild rows so they pick up the new default (if count changes);
-            // here count stays the same so existing rows keep their pre-filled values.
+            var vm     = new GridBuilderViewModel { XDefaultSpacingText = "7500" };
             var config = vm.BuildConfig();
             Assert.Equal(7500.0, config.DefaultSpacingMm);
         }
@@ -428,19 +577,17 @@ namespace GridBuilderAddin.Tests
             var vm = new GridBuilderViewModel();
             vm.UnitMode = GridUnitMode.FeetAndInches;
 
-            // All rows converted from 8000 mm → should be approximately 8000 mm back
             var config = vm.BuildConfig();
-            foreach (var spacingMm in config.XSpacingsMm)
-                Assert.True(spacingMm > 0, "All spacings must be positive mm values");
+            Assert.All(config.XSpacingsMm, s => Assert.True(s > 0, "All X spacings must be positive mm values"));
         }
 
         [Fact]
         public void BuildConfig_InFtInMode_DefaultSpacingMm_IsInMillimetres()
         {
             var vm = new GridBuilderViewModel();
-            vm.UnitMode          = GridUnitMode.FeetAndInches;
-            vm.DefaultFeetText   = "1";
-            vm.DefaultInchesText = "0";
+            vm.UnitMode = GridUnitMode.FeetAndInches;
+            vm.XDefaultFeetText   = "1";
+            vm.XDefaultInchesText = "0";
 
             var config = vm.BuildConfig();
             // 1 ft 0 in = 304.8 mm
