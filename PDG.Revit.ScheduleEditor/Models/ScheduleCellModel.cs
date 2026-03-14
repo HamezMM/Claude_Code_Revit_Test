@@ -37,7 +37,7 @@ namespace PDG.Revit.ScheduleEditor.Models
         /// The <c>StorageType</c> of the backing parameter — carried here so that
         /// the reader service can propagate it to the column model on first encounter.
         /// </summary>
-        public StorageType StorageType { get; init; } = StorageType.Unknown;
+        public StorageType StorageType { get; init; } = StorageType.None;
 
         /// <summary>
         /// The <c>ForgeTypeId</c> spec type of the parameter — carried here so that

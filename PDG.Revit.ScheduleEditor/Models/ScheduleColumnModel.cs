@@ -46,7 +46,7 @@ namespace PDG.Revit.ScheduleEditor.Models
         /// the first element that exposes the parameter.
         /// Defaults to <c>StorageType.Unknown</c> for empty schedules.
         /// </summary>
-        public StorageType StorageType { get; set; } = StorageType.Unknown;
+        public StorageType StorageType { get; set; } = StorageType.None;
 
         /// <summary>
         /// The <c>ForgeTypeId</c> returned by <c>Parameter.Definition.GetDataType()</c>.
