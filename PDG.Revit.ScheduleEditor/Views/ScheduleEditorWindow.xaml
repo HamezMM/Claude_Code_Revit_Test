@@ -100,8 +100,7 @@
             AllowResizingColumns="True"
             ColumnSizer="AutoLastColumnFill"
             Margin="0"
-            AutoGeneratingColumn="ScheduleGrid_AutoGeneratingColumn"
-            QueryCellInfo="ScheduleGrid_QueryCellInfo" />
+            AutoGeneratingColumn="ScheduleGrid_AutoGeneratingColumn" />
 
         <!-- ── Status bar ──────────────────────────────────────────── -->
         <TextBlock Grid.Row="2"

@@ -5,6 +5,7 @@ using Autodesk.Revit.DB;
 using PDG.Revit.FireRatingLines.Models;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace PDG.Revit.FireRatingLines.Services
@@ -47,7 +48,7 @@ namespace PDG.Revit.FireRatingLines.Services
                 .WhereElementIsElementType()
                 .Cast<WallType>())
             {
-                var param = wt.get_Parameter(BuiltInParameter.WALL_ATTR_FIRE_RATING_PARAM);
+                var param = wt.get_Parameter(BuiltInParameter.WALL_ATTR_FIRE_RATING);
                 if (param == null) continue;
                 var rating = param.AsString();
                 if (string.IsNullOrWhiteSpace(rating)) continue;

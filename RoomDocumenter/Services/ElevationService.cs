@@ -352,7 +352,7 @@ namespace RoomDocumenter.Services
                 var schema = Schema.Lookup(OrientationSchemaConstants.SchemaGuid);
                 if (schema == null) return (ProjectNorthOrientation.North, true);
 
-                var entity = doc.GetEntity(schema);
+                var entity = doc.ProjectInformation.GetEntity(schema);
                 if (!entity.IsValid()) return (ProjectNorthOrientation.North, true);
 
                 int raw = entity.Get<int>(OrientationSchemaConstants.FieldName);

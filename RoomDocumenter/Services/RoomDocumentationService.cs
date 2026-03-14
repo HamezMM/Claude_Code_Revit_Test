@@ -198,7 +198,7 @@ namespace RoomDocumenter.Services
             data.FloorFinish   = GetFinishParam(room, BuiltInParameter.ROOM_FINISH_FLOOR);
             data.CeilingFinish = GetFinishParam(room, BuiltInParameter.ROOM_FINISH_CEILING);
             data.WallFinish    = GetFinishParam(room, BuiltInParameter.ROOM_FINISH_WALL);
-            data.BaseFinish    = GetFinishParam(room, BuiltInParameter.ROOM_BASE_FINISH);
+            data.BaseFinish    = room.LookupParameter("Base Finish")?.AsString() ?? string.Empty;
 
             // Level elevation
             var level = doc.GetElement(room.LevelId) as Level;

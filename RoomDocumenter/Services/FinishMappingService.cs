@@ -38,8 +38,7 @@ namespace RoomDocumenter.Services
         {
             BuiltInParameter.ROOM_FINISH_FLOOR,
             BuiltInParameter.ROOM_FINISH_CEILING,
-            BuiltInParameter.ROOM_FINISH_WALL,
-            BuiltInParameter.ROOM_BASE_FINISH
+            BuiltInParameter.ROOM_FINISH_WALL
         };
 
         // ─────────────────────────────────────────────────────────────────
@@ -58,7 +57,7 @@ namespace RoomDocumenter.Services
             var schema = Schema.Lookup(SchemaGuid);
             if (schema == null) return null;
 
-            var entity = doc.GetEntity(schema);
+            var entity = doc.ProjectInformation.GetEntity(schema);
             if (!entity.IsValid()) return null;
 
             var json = entity.Get<string>(FieldName);
@@ -88,7 +87,7 @@ namespace RoomDocumenter.Services
             var schema = GetOrCreateSchema();
             var entity = new Entity(schema);
             entity.Set(FieldName, JsonSerializer.Serialize(mapping));
-            doc.SetEntity(entity);
+            doc.ProjectInformation.SetEntity(entity);
         }
 
         /// <summary>
@@ -122,8 +121,7 @@ namespace RoomDocumenter.Services
             {
                 (BuiltInParameter.ROOM_FINISH_FLOOR,   "Floor"),
                 (BuiltInParameter.ROOM_FINISH_CEILING, "Ceiling"),
-                (BuiltInParameter.ROOM_FINISH_WALL,    "Wall"),
-                (BuiltInParameter.ROOM_BASE_FINISH,    "Base")
+                (BuiltInParameter.ROOM_FINISH_WALL,    "Wall")
             };
 
             foreach (var room in rooms)
@@ -138,6 +136,14 @@ namespace RoomDocumenter.Services
 
                     if (!result[key].Contains(val))
                         result[key].Add(val);
+                }
+
+                var baseParam = room.LookupParameter("Base Finish");
+                if (baseParam != null)
+                {
+                    var val = baseParam.AsString();
+                    if (!string.IsNullOrWhiteSpace(val) && !result["Base"].Contains(val))
+                        result["Base"].Add(val);
                 }
             }
 
