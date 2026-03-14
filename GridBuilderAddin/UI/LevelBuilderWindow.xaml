@@ -134,7 +134,6 @@
                 <!-- Delete button (hidden for existing levels, visible for new levels) -->
                 <Button Grid.Column="3"
                         Content="✕"
-                        Style="{StaticResource IconButton}"
                         Command="{Binding DataContext.DeleteLevelCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                         CommandParameter="{Binding}"
                         ToolTip="Remove this level">

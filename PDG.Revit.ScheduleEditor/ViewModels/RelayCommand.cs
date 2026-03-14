@@ -10,7 +10,7 @@ namespace PDG.Revit.ScheduleEditor.ViewModels
     /// <c>CanExecuteChanged</c> is wired to <see cref="CommandManager.RequerySuggested"/>
     /// so that WPF button enabled-states refresh automatically.
     /// </summary>
-    internal sealed class RelayCommand : ICommand
+    public sealed class RelayCommand : ICommand
     {
         private readonly Action<object?> _execute;
         private readonly Func<object?, bool>? _canExecute;
