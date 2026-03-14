@@ -2,9 +2,7 @@
 using PDG.Revit.ScheduleEditor.ViewModels;
 using Syncfusion.UI.Xaml.Grid;
 using System.ComponentModel;
-using System.Data;
 using System.Windows;
-using System.Windows.Media;
 
 namespace PDG.Revit.ScheduleEditor.Views
 {
@@ -18,10 +16,6 @@ namespace PDG.Revit.ScheduleEditor.Views
     ///     <see cref="ScheduleGrid_AutoGeneratingColumn"/>:
     ///     read-only columns have <c>AllowEditing = false</c>.
     ///   </item>
-    ///   <item>
-    ///     Apply grey background to read-only cells via
-    ///     <see cref="ScheduleGrid_QueryCellInfo"/>.
-    ///   </item>
     ///   <item>Show an unsaved-changes confirmation prompt on close.</item>
     /// </list>
     /// No business logic is present here — all data work is in the ViewModel and Services.
@@ -29,9 +23,6 @@ namespace PDG.Revit.ScheduleEditor.Views
     public partial class ScheduleEditorWindow : Window
     {
         private ScheduleEditorViewModel? _viewModel;
-
-        private static readonly SolidColorBrush ReadOnlyCellBrush =
-            new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));   // #F0F0F0 light grey
 
         /// <summary>
         /// Initialises the window and binds it to <paramref name="viewModel"/>.
@@ -43,7 +34,6 @@ namespace PDG.Revit.ScheduleEditor.Views
             _viewModel         = viewModel;
             DataContext        = viewModel;
             viewModel.CloseRequested += () => Close();
-            ScheduleGrid.QueryCellInfo += ScheduleGrid_QueryCellInfo;
         }
 
         // ─────────────────────────────────────────────────────────────────
@@ -69,30 +59,6 @@ namespace PDG.Revit.ScheduleEditor.Views
             if (dc.ReadOnly)
             {
                 e.Column.AllowEditing = false;
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────────────
-        // SfDataGrid — per-cell styling
-        // ─────────────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Called by the SfDataGrid for every cell before it is rendered.
-        /// Applies a light-grey background to read-only cells.
-        /// </summary>
-        private void ScheduleGrid_QueryCellInfo(
-            object sender, QueryCellInfoEventArgs e) // API note: Syncfusion type
-        {
-            if (_viewModel?.GridData == null) return;
-            if (e.Column?.MappingName == null) return;
-
-            var dt = _viewModel.GridData;
-            if (!dt.Columns.Contains(e.Column.MappingName)) return;
-
-            var dc = dt.Columns[e.Column.MappingName];
-            if (dc != null && dc.ReadOnly)
-            {
-                e.Style.Background = ReadOnlyCellBrush;
             }
         }
 

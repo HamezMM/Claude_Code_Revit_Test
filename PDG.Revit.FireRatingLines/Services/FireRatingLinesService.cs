@@ -48,7 +48,7 @@ namespace PDG.Revit.FireRatingLines.Services
                 .WhereElementIsElementType()
                 .Cast<WallType>())
             {
-                var param = wt.get_Parameter(BuiltInParameter.WALL_ATTR_FIRE_RATING);
+                var param = wt.LookupParameter("Fire Rating");
                 if (param == null) continue;
                 var rating = param.AsString();
                 if (string.IsNullOrWhiteSpace(rating)) continue;
