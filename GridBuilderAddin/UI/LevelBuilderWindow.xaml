@@ -131,14 +131,13 @@
                     </TextBox.Style>
                 </TextBox>
 
-                <!-- Delete button (hidden for existing levels) -->
+                <!-- Delete button (hidden for existing levels, visible for new levels) -->
                 <Button Grid.Column="3"
                         Content="✕"
                         Style="{StaticResource IconButton}"
                         Command="{Binding DataContext.DeleteLevelCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                         CommandParameter="{Binding}"
-                        ToolTip="Remove this level"
-                        Visibility="{Binding IsExisting, Converter={StaticResource BoolToVis}}">
+                        ToolTip="Remove this level">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
                             <!-- Hide when IsExisting=True (inverse of BoolToVis) -->
