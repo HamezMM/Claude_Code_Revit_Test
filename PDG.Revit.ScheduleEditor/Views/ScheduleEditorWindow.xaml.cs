@@ -43,6 +43,7 @@ namespace PDG.Revit.ScheduleEditor.Views
             _viewModel         = viewModel;
             DataContext        = viewModel;
             viewModel.CloseRequested += () => Close();
+            ScheduleGrid.QueryCellInfo += ScheduleGrid_QueryCellInfo;
         }
 
         // ─────────────────────────────────────────────────────────────────

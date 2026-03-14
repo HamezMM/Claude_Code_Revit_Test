@@ -137,10 +137,6 @@
                         Style="{StaticResource IconButton}"
                         Command="{Binding DataContext.DeleteLevelCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                         CommandParameter="{Binding}"
-<<<<<<< HEAD
-                        ToolTip="Remove this level"
-                        Visibility="{Binding IsExisting, Converter={StaticResource BoolToVis}}">
-=======
                         ToolTip="Remove this level">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
@@ -153,7 +149,6 @@
                             </Style.Triggers>
                         </Style>
                     </Button.Style>
->>>>>>> 94d669ac5de353ae8aaf72ddf5fbe3ce624bf85e
                 </Button>
 
             </Grid>
