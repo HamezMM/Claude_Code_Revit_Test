@@ -94,14 +94,14 @@ namespace PDG.Revit.ScheduleEditor.Services
 
             foreach (var fieldId in fieldOrder)
             {
-                var field = _doc.GetElement(fieldId) as ScheduleField;
+                var field = def.GetField(fieldId);
                 if (field == null) continue;
 
                 SchedulableField sf;
-                try { sf = field.GetSchedulableField(); } // API unverified
+                try { sf = field.GetSchedulableField(); }
                 catch (Exception ex)
                 {
-                    Logger.Log($"[ScheduleReaderService] Skipping field {fieldId.Value}: {ex.Message}");
+                    Logger.Log($"[ScheduleReaderService] Skipping field {fieldId}: {ex.Message}");
                     continue;
                 }
 
@@ -114,9 +114,8 @@ namespace PDG.Revit.ScheduleEditor.Services
                     bip = (BuiltInParameter)(int)paramId.Value;
 
                 // Formula and Count fields can never be written.
-                bool isReadOnly = field.IsReadOnly // API unverified
-                    || field.FieldType == ScheduleFieldType.Formula  // API unverified
-                    || field.FieldType == ScheduleFieldType.Count;   // API unverified
+                bool isReadOnly = field.FieldType == ScheduleFieldType.Formula
+                    || field.FieldType == ScheduleFieldType.Count;
 
                 // ElementId-typed parameters are read-only in v1 of this tool.
                 // StorageType is not known until we read the first element — set Unknown.
@@ -127,10 +126,7 @@ namespace PDG.Revit.ScheduleEditor.Services
                 try   { fieldName = field.ColumnHeading; }  // API unverified
                 catch { /* swallow — some field types may not expose a heading */ }
                 if (string.IsNullOrWhiteSpace(fieldName))
-                {
-                    try   { fieldName = sf.Name; }  // API unverified
-                    catch { fieldName = $"Column{colIdx}"; }
-                }
+                    fieldName = $"Column{colIdx}";
 
                 columns.Add(new ScheduleColumnModel
                 {
@@ -140,7 +136,7 @@ namespace PDG.Revit.ScheduleEditor.Services
                     BuiltInParam = bip,
                     FieldType    = field.FieldType,
                     IsReadOnly   = isReadOnly,
-                    StorageType  = StorageType.Unknown,
+                    StorageType  = StorageType.None,
                     ForgeTypeId  = null
                 });
             }
@@ -157,12 +153,8 @@ namespace PDG.Revit.ScheduleEditor.Services
             ScheduleDefinition def,
             List<ScheduleColumnModel> columns)
         {
-            if (schedule.IsKeySchedule)        // API unverified
+            if (def.IsKeySchedule)
                 return BuildKeyRows(def, columns);
-            if (schedule.IsMaterialTakeoff)    // API unverified
-                return BuildMaterialTakeoffRows(def, columns);
-            if (schedule.IsNoteBlock)          // API unverified
-                return BuildNoteBlockRows(def, columns);
 
             return BuildStandardRows(def, columns);
         }
@@ -172,7 +164,7 @@ namespace PDG.Revit.ScheduleEditor.Services
             ScheduleDefinition def,
             List<ScheduleColumnModel> columns)
         {
-            var catId = def.GetCategoryId(); // API unverified — returns ElementId
+            var catId = def.CategoryId;
             var elements = new FilteredElementCollector(_doc)
                 .OfCategoryId(catId)          // API unverified
                 .WhereElementIsNotElementType()
@@ -198,29 +190,12 @@ namespace PDG.Revit.ScheduleEditor.Services
             ScheduleDefinition def,
             List<ScheduleColumnModel> columns)
         {
-            var catId = def.GetCategoryId(); // API unverified
+            var catId = def.CategoryId;
 
-            // API unverified — ScheduleKeyEntry may not be available in Revit 2024.
-            // Fallback: treat as standard rows if the class is not found.
-            List<Element> elements;
-            try
-            {
-                elements = new FilteredElementCollector(_doc)
-                    .OfClass(typeof(ScheduleKeyEntry)) // API unverified
-                    .Cast<ScheduleKeyEntry>()           // API unverified
-                    .Where(ke => ke.Category?.Id != null
-                                 && ke.Category.Id.Equals(catId))
-                    .Cast<Element>()
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[ScheduleReaderService] ScheduleKeyEntry not available ({ex.Message}). Falling back to standard collector.");
-                elements = new FilteredElementCollector(_doc)
-                    .OfCategoryId(catId)
-                    .WhereElementIsNotElementType()
-                    .ToList();
-            }
+            var elements = new FilteredElementCollector(_doc)
+                .OfCategoryId(catId)
+                .WhereElementIsNotElementType()
+                .ToList();
 
             Logger.Log($"[ScheduleReaderService] Key schedule — {elements.Count} key entries.");
             return BuildRowsFromElements(elements, columns, ScheduleType.Key);
@@ -240,7 +215,7 @@ namespace PDG.Revit.ScheduleEditor.Services
             ScheduleDefinition def,
             List<ScheduleColumnModel> columns)
         {
-            var catId = def.GetCategoryId(); // API unverified
+            var catId = def.CategoryId;
             var elements = new FilteredElementCollector(_doc)
                 .OfCategoryId(catId)
                 .WhereElementIsNotElementType()
@@ -271,7 +246,7 @@ namespace PDG.Revit.ScheduleEditor.Services
             ScheduleDefinition def,
             List<ScheduleColumnModel> columns)
         {
-            var catId = def.GetCategoryId(); // API unverified
+            var catId = def.CategoryId;
             // AnnotationSymbol instances belong to the detail-item categories.
             // Collect all non-element-type elements of the schedule's category.
             var elements = new FilteredElementCollector(_doc)
@@ -324,8 +299,8 @@ namespace PDG.Revit.ScheduleEditor.Services
 
                 // Back-fill StorageType and ForgeTypeId on the column model from the
                 // first element that successfully resolves the parameter.
-                if (col.StorageType == StorageType.Unknown
-                    && cell.StorageType != StorageType.Unknown)
+                if (col.StorageType == StorageType.None
+                    && cell.StorageType != StorageType.None)
                 {
                     col.StorageType = cell.StorageType;
                     col.ForgeTypeId = cell.ForgeTypeId;
@@ -346,7 +321,7 @@ namespace PDG.Revit.ScheduleEditor.Services
                     DisplayValue         = "",
                     OriginalDisplayValue = "",
                     IsReadOnly           = true,
-                    StorageType          = StorageType.Unknown
+                    StorageType          = StorageType.None
                 };
             }
 
@@ -360,7 +335,8 @@ namespace PDG.Revit.ScheduleEditor.Services
                 && col.ParameterId != null
                 && col.ParameterId != ElementId.InvalidElementId)
             {
-                param = element.get_Parameter(col.ParameterId);
+                param = element.Parameters.Cast<Parameter>()
+                    .FirstOrDefault(p => p.Id.Equals(col.ParameterId));
             }
 
             if (param == null)
@@ -371,7 +347,7 @@ namespace PDG.Revit.ScheduleEditor.Services
                     DisplayValue         = "",
                     OriginalDisplayValue = "",
                     IsReadOnly           = true,
-                    StorageType          = StorageType.Unknown
+                    StorageType          = StorageType.None
                 };
             }
 
@@ -385,7 +361,7 @@ namespace PDG.Revit.ScheduleEditor.Services
             try { forgeTypeId = param.Definition.GetDataType(); } // API unverified
             catch { /* not all parameters expose a data type */ }
 
-            string displayValue = FormatDisplayValue(param, forgeTypeId);
+            string displayValue = FormatDisplayValue(param);
             object? rawValue    = ReadRawValue(param);
 
             return new ScheduleCellModel
@@ -399,7 +375,7 @@ namespace PDG.Revit.ScheduleEditor.Services
             };
         }
 
-        private string FormatDisplayValue(Parameter param, ForgeTypeId? forgeTypeId)
+        private string FormatDisplayValue(Parameter param)
         {
             try
             {
@@ -412,16 +388,7 @@ namespace PDG.Revit.ScheduleEditor.Services
                         return param.AsInteger().ToString();
 
                     case StorageType.Double:
-                        if (forgeTypeId != null)
-                        {
-                            // UnitFormatUtils.Format — API unverified for Revit 2024 signature.
-                            // Expected: Format(Units units, ForgeTypeId specTypeId, double value)
-                            return UnitFormatUtils.Format(   // API unverified
-                                _doc.GetUnits(),             // API unverified
-                                forgeTypeId,
-                                param.AsDouble());
-                        }
-                        return param.AsDouble().ToString("G10");
+                        return param.AsValueString() ?? param.AsDouble().ToString("G10");
 
                     case StorageType.ElementId:
                         var eid = param.AsElementId();
@@ -458,9 +425,7 @@ namespace PDG.Revit.ScheduleEditor.Services
 
         private static ScheduleType ClassifySchedule(ViewSchedule vs)
         {
-            if (vs.IsKeySchedule)    return ScheduleType.Key;            // API unverified
-            if (vs.IsMaterialTakeoff) return ScheduleType.MaterialTakeoff; // API unverified
-            if (vs.IsNoteBlock)      return ScheduleType.NoteBlock;       // API unverified
+            if (vs.Definition.IsKeySchedule) return ScheduleType.Key;
             return ScheduleType.Standard;
         }
     }

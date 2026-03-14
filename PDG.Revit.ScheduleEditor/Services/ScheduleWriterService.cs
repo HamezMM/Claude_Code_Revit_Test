@@ -155,7 +155,8 @@ namespace PDG.Revit.ScheduleEditor.Services
                     && edit.ParameterId != null
                     && edit.ParameterId != ElementId.InvalidElementId)
                 {
-                    param = element.get_Parameter(edit.ParameterId);
+                    param = element.Parameters.Cast<Parameter>()
+                        .FirstOrDefault(p => p.Id.Equals(edit.ParameterId));
                 }
 
                 if (param == null)
