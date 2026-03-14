@@ -1,0 +1,385 @@
+<Window
+    x:Class="GridBuilderAddin.UI.LevelBuilderWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Level Builder"
+    Width="560"
+    Height="720"
+    MinWidth="480"
+    MinHeight="560"
+    ResizeMode="CanResize"
+    WindowStartupLocation="CenterOwner"
+    Background="#F5F5F5">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- ── Colours ──────────────────────────────────────────────────── -->
+        <SolidColorBrush x:Key="PrimaryBlue"    Color="#0070C5"/>
+        <SolidColorBrush x:Key="DarkHeader"     Color="#2D2D2D"/>
+        <SolidColorBrush x:Key="CardBorder"     Color="#E0E0E0"/>
+        <SolidColorBrush x:Key="ErrorBrush"     Color="#C0392B"/>
+        <SolidColorBrush x:Key="ExistingBrush"  Color="#C0392B"/>
+        <SolidColorBrush x:Key="NewLevelBrush"  Color="#0070C5"/>
+
+        <!-- ── Card border style ────────────────────────────────────────── -->
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background"      Value="White"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource CardBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="4"/>
+            <Setter Property="Padding"         Value="8"/>
+            <Setter Property="Margin"          Value="0,0,0,8"/>
+        </Style>
+
+        <!-- ── Section heading ──────────────────────────────────────────── -->
+        <Style x:Key="SectionHeading" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize"   Value="11"/>
+            <Setter Property="Foreground" Value="#555555"/>
+            <Setter Property="Margin"     Value="0,0,0,6"/>
+        </Style>
+
+        <!-- ── Button: default ──────────────────────────────────────────── -->
+        <Style TargetType="Button">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding"  Value="18,6"/>
+            <Setter Property="MinWidth" Value="80"/>
+            <Setter Property="Cursor"   Value="Hand"/>
+        </Style>
+
+        <!-- ── Button: primary (blue) ───────────────────────────────────── -->
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background"  Value="{StaticResource PrimaryBlue}"/>
+            <Setter Property="Foreground"  Value="White"/>
+            <Setter Property="BorderBrush" Value="#005A9E"/>
+        </Style>
+
+        <!-- ── Button: icon/small ───────────────────────────────────────── -->
+        <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Padding"   Value="4,2"/>
+            <Setter Property="MinWidth"  Value="24"/>
+            <Setter Property="FontSize"  Value="13"/>
+        </Style>
+
+        <!-- ── Standard text box ────────────────────────────────────────── -->
+        <Style TargetType="TextBox">
+            <Setter Property="FontSize"                   Value="12"/>
+            <Setter Property="Padding"                    Value="4,3"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+
+        <!--
+            ── Level row DataTemplate ────────────────────────────────────────
+            Each row shows:
+              • Elevation text box
+              • Name text box
+              • Delete button (hidden for existing levels)
+            Existing levels are styled in red.
+        -->
+        <DataTemplate x:Key="LevelRowTemplate">
+            <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <!-- Elevation -->
+                    <ColumnDefinition Width="110"/>
+                    <!-- mm label -->
+                    <ColumnDefinition Width="30"/>
+                    <!-- Name -->
+                    <ColumnDefinition Width="*"/>
+                    <!-- Delete button -->
+                    <ColumnDefinition Width="28"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Elevation input -->
+                <TextBox Grid.Column="0"
+                         Text="{Binding ElevationText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         HorizontalContentAlignment="Right">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                            <Style.Triggers>
+                                <!-- Red border when elevation is invalid -->
+                                <DataTrigger Binding="{Binding IsValidElevation}" Value="False">
+                                    <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+
+                <TextBlock Grid.Column="1"
+                           Text="mm"
+                           FontSize="11"
+                           Foreground="#666"
+                           VerticalAlignment="Center"
+                           Margin="4,0,4,0"/>
+
+                <!-- Level name input -->
+                <TextBox Grid.Column="2"
+                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,0,4,0">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                            <!-- Existing levels use red foreground as a warning -->
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsExisting}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource ExistingBrush}"/>
+                                    <Setter Property="FontWeight"  Value="SemiBold"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+
+                <!-- Delete button (hidden for existing levels, visible for new levels) -->
+                <Button Grid.Column="3"
+                        Content="✕"
+                        Style="{StaticResource IconButton}"
+                        Command="{Binding DataContext.DeleteLevelCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                        CommandParameter="{Binding}"
+                        ToolTip="Remove this level">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                            <!-- Hide when IsExisting=True (inverse of BoolToVis) -->
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsExisting}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+            </Grid>
+        </DataTemplate>
+
+    </Window.Resources>
+
+    <DockPanel>
+
+        <!-- ══ Dark header bar ════════════════════════════════════════════ -->
+        <Border DockPanel.Dock="Top"
+                Background="{StaticResource DarkHeader}"
+                Padding="16,10">
+            <StackPanel Orientation="Vertical">
+                <TextBlock Text="Level Builder"
+                           FontSize="15"
+                           FontWeight="SemiBold"
+                           Foreground="White"/>
+                <TextBlock Text="Step 2 of 3  —  Level Builder"
+                           FontSize="10"
+                           Foreground="#A0C8E8"
+                           Margin="0,2,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ══ Footer ═════════════════════════════════════════════════════ -->
+        <Border DockPanel.Dock="Bottom"
+                Background="White"
+                BorderBrush="{StaticResource CardBorder}"
+                BorderThickness="0,1,0,0"
+                Padding="16,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Validation message -->
+                <TextBlock Grid.Column="0"
+                           Text="{Binding ValidationMessage}"
+                           Foreground="{StaticResource ErrorBrush}"
+                           FontSize="11"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsValid}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <!-- Buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Cancel"
+                            Command="{Binding CancelCommand}"
+                            Margin="0,0,8,0"/>
+                    <Button Content="← Back"
+                            Command="{Binding BackCommand}"
+                            Margin="0,0,8,0"/>
+                    <Button Content="Next →"
+                            Command="{Binding NextCommand}"
+                            Style="{StaticResource PrimaryButton}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ══ Scrollable body ════════════════════════════════════════════ -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="16,12,16,0">
+
+                <!-- ── Legend ────────────────────────────────────────────── -->
+                <Border Style="{StaticResource Card}" Padding="8,6">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="12" Height="12" Background="{StaticResource ExistingBrush}"
+                                CornerRadius="2" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Red = existing Revit levels (can rename / adjust elevation, cannot delete)"
+                                   FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Levels list ───────────────────────────────────────── -->
+                <TextBlock Text="LEVELS" Style="{StaticResource SectionHeading}"/>
+                <Border Style="{StaticResource Card}" MaxHeight="240">
+                    <StackPanel>
+                        <!-- Column headers -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="30"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="28"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Elevation" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#888" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                            <TextBlock Grid.Column="2" Text="Name" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#888"/>
+                        </Grid>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="190">
+                            <ItemsControl ItemsSource="{Binding Levels}"
+                                          ItemTemplate="{StaticResource LevelRowTemplate}"
+                                          Margin="0,2"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Add Level button ──────────────────────────────────── -->
+                <Button Content="+ Add Level"
+                        Command="{Binding AddLevelCommand}"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,8"
+                        Padding="12,5"
+                        MinWidth="0"/>
+
+                <!-- ── Total height summary ──────────────────────────────── -->
+                <TextBlock Text="{Binding TotalHeightText}"
+                           FontSize="11"
+                           Foreground="#555"
+                           Margin="0,0,0,8"
+                           FontWeight="SemiBold">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsValid}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <!-- ── Schematic preview ─────────────────────────────────── -->
+                <TextBlock Text="ELEVATION SCHEMATIC" Style="{StaticResource SectionHeading}"/>
+                <Border Style="{StaticResource Card}" Padding="4">
+                    <Viewbox Stretch="Uniform"
+                             HorizontalAlignment="Center"
+                             MaxHeight="240">
+                        <Grid Width="340" Height="220">
+
+                            <!-- Line layer -->
+                            <ItemsControl ItemsSource="{Binding PreviewLines}"
+                                          Width="340" Height="220"
+                                          IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas Width="340" Height="220" Background="White"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Line X1="{Binding X1}" Y1="{Binding Y1}"
+                                              X2="{Binding X2}" Y2="{Binding Y2}"
+                                              StrokeThickness="1.5"
+                                              IsHitTestVisible="False">
+                                            <Line.Style>
+                                                <Style TargetType="Line">
+                                                    <!-- Default: new level = blue -->
+                                                    <Setter Property="Stroke" Value="#0070C5"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExisting}" Value="True">
+                                                            <Setter Property="Stroke" Value="#C0392B"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Line.Style>
+                                        </Line>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Label layer -->
+                            <ItemsControl ItemsSource="{Binding PreviewLabels}"
+                                          Width="340" Height="220"
+                                          IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas Width="340" Height="220"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding X}"/>
+                                        <Setter Property="Canvas.Top"  Value="{Binding Y}"/>
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Text}"
+                                                   FontSize="8"
+                                                   RenderTransformOrigin="0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <!-- Default: new level = dark -->
+                                                    <Setter Property="Foreground" Value="#333"/>
+                                                    <Setter Property="RenderTransform">
+                                                        <Setter.Value><RotateTransform Angle="0"/></Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExisting}" Value="True">
+                                                            <Setter Property="Foreground" Value="#C0392B"/>
+                                                            <Setter Property="FontWeight"  Value="SemiBold"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsVertical}" Value="True">
+                                                            <Setter Property="RenderTransform">
+                                                                <Setter.Value><RotateTransform Angle="90"/></Setter.Value>
+                                                            </Setter>
+                                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                        </Grid>
+                    </Viewbox>
+                </Border>
+
+                <Rectangle Height="8"/>
+
+            </StackPanel>
+        </ScrollViewer>
+
+    </DockPanel>
+</Window>

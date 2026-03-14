@@ -5,6 +5,7 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using PDG.Revit.FireRatingLines.Models;
 using PDG.Revit.FireRatingLines.Services;
 using System;
 using System.Linq;
@@ -14,11 +15,11 @@ namespace PDG.Revit.FireRatingLines.Commands
 {
     /// <summary>
     /// IExternalCommand entry point for the Fire Rating Lines tool.
-    /// Orchestrates all service stages (walls + floors/ceilings/roofs) and shows a TaskDialog.
+    /// Orchestrates the service stages and presents a TaskDialog summary.
     /// No business logic or transaction management lives here — see FireRatingLinesService.
     /// </summary>
     // PDG API NOTE 2026-03-01: [Transaction(TransactionMode.Manual)]
-    //   Verified: revitapidocs.com/2024/ — required; the service manages its own TransactionGroup.
+    //   Verified: revitapidocs.com/2024/ — required; the service manages its own transactions.
     // PDG API NOTE 2026-03-01: [Regeneration(RegenerationOption.Manual)]
     //   Verified: revitapidocs.com/2024/ — suppresses automatic document regeneration.
     [Transaction(TransactionMode.Manual)]
@@ -44,7 +45,13 @@ namespace PDG.Revit.FireRatingLines.Commands
 
                 var service = new FireRatingLinesService();
 
-                // ── Stage 1: Discover fire-rated wall types ───────────────────────
+                // ── Stage 0: Ensure all standard line styles exist ────────────
+                // Creates any of the six standard fire rating line styles that are
+                // missing from the document, then returns the full style dictionary.
+                // Standard names: 45 MIN, 1 HR, 1.5 HR, 2 HR, 3 HR, 4 HR
+                var lineStyles = service.EnsureFireRatingLineStyles(doc);
+
+                // ── Stage 1: Discover fire-rated wall types ───────────────────
                 // Returns Dictionary<long wallTypeId, string ratingKey> for ALL rated types.
                 var wallTypeIdToRating = service.GetFireRatedWallTypes(doc);
 
@@ -57,19 +64,15 @@ namespace PDG.Revit.FireRatingLines.Commands
                 {
                     TaskDialog.Show(
                         "PDG: Fire Rating Lines",
-                        "No fire-rated wall, floor, ceiling, or roof types were found in this document.\n\n" +
-                        "To use this tool, set the 'Fire Rating' parameter on one or more element types " +
-                        "to a value that matches a line style name (e.g. '1-HR'), then rerun.");
+                        "No fire-rated wall types were found in this document.\n\n" +
+                        "To use this tool, assign a Fire Rating value to one or more wall types:\n" +
+                        "  Manage tab → Settings → Object Styles (or edit the wall type directly)\n" +
+                        "  Set the 'Fire Rating' parameter to one of the standard values:\n" +
+                        "  " + string.Join(", ", FireRatingStandards.StandardRatings));
                     return Result.Succeeded;
                 }
 
-                // ── Stage 2: Resolve line styles — combine keys from all element types ──
-                var allRatingKeys = wallTypeIdToRating.Values
-                    .Concat(horzTypeIdToRating.Values)
-                    .Distinct(StringComparer.OrdinalIgnoreCase);
-                var lineStyles = service.GetMatchingLineStyles(doc, allRatingKeys);
-
-                // ── Stage 3: Collect fire-rated walls in sheeted plan + section views ─
+                // ── Stage 3: Collect walls in sheeted views ───────────────────
                 var wallsInViews = service.GetFireRatedWallsInViews(doc, wallTypeIdToRating);
 
                 // ── Stage B: Collect fire-rated floors/ceilings/roofs in sheeted sections ─
@@ -97,8 +100,9 @@ namespace PDG.Revit.FireRatingLines.Commands
                 if (result.UnmatchedRatings.Count > 0)
                 {
                     sb.AppendLine();
-                    sb.AppendLine("WARNING: No matching line style for the following fire ratings.");
-                    sb.AppendLine("Create a line style with an exactly matching name and rerun.");
+                    sb.AppendLine("WARNING: The following fire rating values on wall types do not match");
+                    sb.AppendLine("any of the standard names. Update the wall type's Fire Rating parameter");
+                    sb.AppendLine("to one of: " + string.Join(", ", FireRatingStandards.StandardRatings));
                     sb.AppendLine($"  Unmatched: {string.Join(", ", result.UnmatchedRatings)}");
                 }
 

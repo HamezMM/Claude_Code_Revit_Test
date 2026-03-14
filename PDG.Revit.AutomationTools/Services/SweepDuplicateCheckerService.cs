@@ -1,4 +1,6 @@
+// PDG GENERATED: 2026-03-01 | Revit 2024 | Verified: revitapidocs.com/2024/
 using Autodesk.Revit.DB;
+using System;
 using System.Linq;
 
 namespace PDG.Revit.AutomationTools.Services
@@ -20,6 +22,17 @@ namespace PDG.Revit.AutomationTools.Services
         /// </remarks>
         public bool IsDuplicate(Document doc, Wall wall, ElementId targetSweepTypeId)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (wall == null) throw new ArgumentNullException(nameof(wall));
+            if (targetSweepTypeId == null) throw new ArgumentNullException(nameof(targetSweepTypeId));
+
+            // PDG API NOTE 2026-03-01: FilteredElementCollector(doc).OfClass(typeof(WallSweep))
+            //   Verified: revitapidocs.com/2024/ — WallSweep (class) is a valid OfClass target.
+            //   Returns all standalone wall sweep instances in the document.
+            // PDG API NOTE 2026-03-01: WallSweep.GetHostIds()
+            //   Verified: revitapidocs.com/2024/ — returns ElementIds of all host walls for the sweep.
+            // PDG API NOTE 2026-03-01: WallSweep.GetTypeId()
+            //   Verified: revitapidocs.com/2024/ — returns the ElementId of the sweep's type element.
             // Collect all standalone WallSweep elements in the document,
             // then filter to those hosted on this wall with the matching type.
             // WallSweep.GetHostIds() is the API-correct way to navigate from

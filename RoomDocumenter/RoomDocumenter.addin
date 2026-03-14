@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+
+  <!-- Application: loads on Revit startup, registers the Room Documenter ribbon panel -->
+  <AddIn Type="Application">
+    <Name>RoomDocumenter</Name>
+    <Assembly>RoomDocumenter.dll</Assembly>
+    <!-- Fresh GUID — do not reuse from any other addin -->
+    <AddInId>7F2A1E3C-8B4D-4F9A-B2C6-0D5E8F1A3C7B</AddInId>
+    <FullClassName>RoomDocumenter.App</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+  </AddIn>
+
+  <!-- Command 1: Finish Mapping -->
+  <AddIn Type="Command">
+    <Name>RoomDocumenter Finish Mapping</Name>
+    <Assembly>RoomDocumenter.dll</Assembly>
+    <AddInId>3A5C9E1F-7D2B-4F8E-A6C3-1B4D7F0A2E5C</AddInId>
+    <FullClassName>RoomDocumenter.Commands.FinishMappingCmd</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+    <Text>Finish Mapping</Text>
+    <Description>Map room finish parameter strings to Revit FloorType, CeilingType, and WallSweepType.</Description>
+    <LongDescription>Opens a tabbed WPF dialog listing all unique finish strings discovered in the project across Floor Finish, Ceiling Finish, Wall Finish, and Base Finish parameters. Assign a Revit system family type to each string and save to Extensible Storage.</LongDescription>
+    <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
+  </AddIn>
+
+  <!-- Command 2: Room Documentation -->
+  <AddIn Type="Command">
+    <Name>RoomDocumenter Document Rooms</Name>
+    <Assembly>RoomDocumenter.dll</Assembly>
+    <AddInId>8E1C4A7F-2D5B-4E9F-B3A6-4C7D0E1F5A8B</AddInId>
+    <FullClassName>RoomDocumenter.Commands.RoomDocumentationCmd</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+    <Text>Document Rooms</Text>
+    <Description>Create or reconcile floors, ceilings, and baseboards for rooms based on the saved finish mapping.</Description>
+    <LongDescription>Reads the saved finish mapping and, for each room, creates or reconciles Floor, Ceiling, and WallSweep baseboard elements. Existing elements of the correct type are left unchanged; mismatched elements are replaced. A full summary is displayed on completion.</LongDescription>
+    <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
+  </AddIn>
+
+  <!-- Command 3: Interior Elevations -->
+  <AddIn Type="Command">
+    <Name>RoomDocumenter Interior Elevations</Name>
+    <Assembly>RoomDocumenter.dll</Assembly>
+    <AddInId>2B6D9F3A-5E1C-4A8F-C7D2-8F0B3E6A1C4D</AddInId>
+    <FullClassName>RoomDocumenter.Commands.InteriorElevationCmd</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+    <Text>Interior Elevations</Text>
+    <Description>Create 4-way interior elevation views for selected rooms, cropped to room boundary and named by compass direction.</Description>
+    <LongDescription>Opens a searchable room picker, then creates four interior elevation views per selected room. Views are named using the building's cardinal orientation read from Extensible Storage and crop boxes are sized to the room boundary plus a configurable offset in millimetres.</LongDescription>
+    <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
+  </AddIn>
+
+</RevitAddIns>

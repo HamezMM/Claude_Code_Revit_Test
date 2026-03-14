@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+
+  <!--
+    Grid Builder — standalone structural grid creation command for Revit 2024.
+    Namespace: GridBuilderAddin
+    Assembly:  GridBuilderAddin.dll
+  -->
+
+  <!--
+    Application: loads on Revit startup, registers the PDG Tools ribbon tab
+    and adds the Grid Builder button to the Structural panel.
+  -->
+  <AddIn Type="Application">
+    <Name>Grid Builder App</Name>
+    <Assembly>GridBuilderAddin.dll</Assembly>
+    <!-- Fresh GUID — do not reuse from any other addin -->
+    <AddInId>B4E8F3A2-9D5C-4B6E-8F7A-2C4D6E8F0B1C</AddInId>
+    <FullClassName>GridBuilderAddin.App</FullClassName>
+    <VendorId>GridBuilderAddin</VendorId>
+    <VendorDescription>Grid Builder Addin</VendorDescription>
+  </AddIn>
+
+  <!-- Command: registers the Grid Builder command so Revit can resolve it from
+       the ribbon button and expose it in the Keyboard Shortcuts dialog -->
+  <AddIn Type="Command">
+    <Name>Grid Builder</Name>
+    <Assembly>GridBuilderAddin.dll</Assembly>
+    <!-- Fresh GUID — do not reuse from any other addin -->
+    <AddInId>A3F7D2E1-8C4B-4F5A-9E6D-1B3C5D7F9A2E</AddInId>
+    <FullClassName>GridBuilderAddin.Commands.GridBuilderCmd</FullClassName>
+    <VendorId>GridBuilderAddin</VendorId>
+    <VendorDescription>Grid Builder Addin</VendorDescription>
+    <Text>Grid Builder</Text>
+    <Description>Opens the Grid Builder dialog to configure and create a rectilinear structural grid.</Description>
+    <LongDescription>
+      Presents a WPF dialog to configure X-axis (numerical) and Y-axis (alphabetical) grid lines,
+      per-interval spacing overrides, and a live schematic preview. On confirm, creates all grids
+      in the active Revit document starting at the internal origin.
+    </LongDescription>
+    <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
+  </AddIn>
+
+</RevitAddIns>

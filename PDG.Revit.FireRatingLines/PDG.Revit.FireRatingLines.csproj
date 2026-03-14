@@ -77,7 +77,7 @@
 
     <!-- Copy the .addin manifest so Revit discovers the assembly -->
     <Copy
-      SourceFiles="$(MSBuildProjectDirectory)\manifests\2024\PDG.FireRatingLines.addin"
+      SourceFiles="$(MSBuildProjectDirectory)\PDG.FireRatingLines.addin"
       DestinationFolder="$(RevitAddinsFolder)"
       SkipUnchangedFiles="true" />
 

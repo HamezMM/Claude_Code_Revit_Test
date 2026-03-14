@@ -1,0 +1,154 @@
+<Window
+    x:Class="PDG.Revit.AutomationTools.UI.Windows.PlaceWallBaseSweepWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="PDG Tools — Wall Base Sweep Placer"
+    Width="480"
+    SizeToContent="Height"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterOwner"
+    Background="#F5F5F5">
+
+    <Window.Resources>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Margin" Value="0,12,0,4"/>
+        </Style>
+        <Style x:Key="SubLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="18,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="MinWidth" Value="90"/>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#0063B1"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#0052A3"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <!-- Wall Types -->
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="140"/>
+            <!-- Sweep Profile -->
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <!-- Offset -->
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <!-- Scope -->
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <!-- Validation message -->
+            <RowDefinition Height="Auto"/>
+            <!-- Buttons -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ── Wall Types ─────────────────────────────────────── -->
+        <TextBlock Grid.Row="0" Style="{StaticResource SectionHeader}" Text="Target Wall Types"/>
+        <TextBlock Grid.Row="1" Style="{StaticResource SubLabel}"
+                   Text="Select one or more wall types to receive base sweeps."/>
+
+        <Border Grid.Row="2"
+                BorderBrush="#CCCCCC" BorderThickness="1"
+                Background="White">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding WallTypes}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Name}"
+                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                      Margin="6,3"
+                                      FontSize="12"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- ── Sweep Profile ──────────────────────────────────── -->
+        <TextBlock Grid.Row="3" Style="{StaticResource SectionHeader}" Text="Sweep Profile Type"/>
+        <ComboBox Grid.Row="4"
+                  ItemsSource="{Binding SweepTypes}"
+                  SelectedItem="{Binding SelectedSweepType, Mode=TwoWay}"
+                  DisplayMemberPath="Name"
+                  FontSize="12"
+                  Margin="0,0,0,0"/>
+
+        <!-- ── Base Offset ────────────────────────────────────── -->
+        <TextBlock Grid.Row="5" Style="{StaticResource SectionHeader}" Text="Offset from Base"/>
+        <StackPanel Grid.Row="6" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBox Width="100"
+                     Text="{Binding OffsetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     FontSize="12"
+                     Padding="4,3"
+                     HorizontalContentAlignment="Right"/>
+            <TextBlock Text=" mm"
+                       VerticalAlignment="Center"
+                       FontSize="12"
+                       Foreground="#444"
+                       Margin="4,0,0,0"/>
+        </StackPanel>
+
+        <!-- ── Scope ──────────────────────────────────────────── -->
+        <TextBlock Grid.Row="7" Style="{StaticResource SectionHeader}" Text="Scope"/>
+        <StackPanel Grid.Row="8" Orientation="Horizontal">
+            <RadioButton Content="Entire Model"
+                         IsChecked="{Binding ScopeIsEntireModel, Mode=TwoWay}"
+                         FontSize="12"
+                         Margin="0,0,16,0"
+                         VerticalContentAlignment="Center"/>
+            <RadioButton Content="Active View"
+                         IsChecked="{Binding ScopeIsActiveView, Mode=TwoWay}"
+                         FontSize="12"
+                         Margin="0,0,16,0"
+                         VerticalContentAlignment="Center"/>
+            <RadioButton Content="Current Selection"
+                         IsChecked="{Binding ScopeIsCurrentSelection, Mode=TwoWay}"
+                         FontSize="12"
+                         VerticalContentAlignment="Center"/>
+        </StackPanel>
+
+        <!-- ── Validation message ─────────────────────────────── -->
+        <TextBlock Grid.Row="9"
+                   Text="{Binding ValidationMessage}"
+                   Foreground="#C0392B"
+                   FontSize="11"
+                   Margin="0,10,0,0">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <!-- Hidden by default; made visible only when validation fails -->
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsValid}" Value="False">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <!-- ── Buttons ────────────────────────────────────────── -->
+        <StackPanel Grid.Row="10"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    Margin="0,0,8,0"/>
+            <Button Content="Place Sweeps"
+                    Command="{Binding PlaceCommand}"
+                    Style="{StaticResource PrimaryButton}"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -5,7 +5,6 @@ using Autodesk.Revit.DB;
 using PDG.Revit.FireRatingLines.Models;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 namespace PDG.Revit.FireRatingLines.Services
@@ -39,6 +38,8 @@ namespace PDG.Revit.FireRatingLines.Services
         // PDG API NOTE 2026-03-01: ElementId.Value (Int64) — use throughout, never .IntegerValue.
         public Dictionary<long, string> GetFireRatedWallTypes(Document doc)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+
             var result = new Dictionary<long, string>();
 
             foreach (var wt in new FilteredElementCollector(doc)
@@ -75,12 +76,15 @@ namespace PDG.Revit.FireRatingLines.Services
             Document doc,
             IEnumerable<string> ratingKeys)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (ratingKeys == null) throw new ArgumentNullException(nameof(ratingKeys));
+
             var result = new Dictionary<string, GraphicsStyle>(StringComparer.OrdinalIgnoreCase);
 
             var ostLinesCategory = Category.GetCategory(doc, BuiltInCategory.OST_Lines);
             if (ostLinesCategory == null)
             {
-                Trace.TraceWarning("PDG FireRatingLines: OST_Lines category not found in document.");
+                PDGLogger.Warning("PDG FireRatingLines: OST_Lines category not found in document.");
                 return result;
             }
             long ostLinesId = ostLinesCategory.Id.Value;
@@ -108,7 +112,73 @@ namespace PDG.Revit.FireRatingLines.Services
                 if (match != null)
                     result[key] = match;
                 else
-                    Trace.TraceWarning($"PDG FireRatingLines: No line style found for rating '{key}'.");
+                    PDGLogger.Warning($"PDG FireRatingLines: No line style found for rating '{key}'.");
+            }
+
+            return result;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Stage 2b — Ensure Standard Fire Rating Line Styles Exist
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Ensures that a line style (OST_Lines projection subcategory) exists in the
+        /// document for every entry in <see cref="FireRatingStandards.StandardRatings"/>.
+        /// Any missing styles are created in a single Transaction before drawing begins.
+        /// Returns a dictionary of ratingName → GraphicsStyle for all standard ratings.
+        /// </summary>
+        // PDG API NOTE 2026-03-01: doc.Settings.Categories.NewSubcategory(parentCategory, name)
+        //   Verified: revitapidocs.com/2024/ — creates a new named subcategory under the given
+        //   parent category. Must be called inside a Transaction.
+        // PDG API NOTE 2026-03-01: Category.GetGraphicsStyle(GraphicsStyleType.Projection)
+        //   Verified: revitapidocs.com/2024/ — returns the projection GraphicsStyle element for
+        //   the subcategory. Revit creates both Projection and Cut styles automatically.
+        public Dictionary<string, GraphicsStyle> EnsureFireRatingLineStyles(Document doc)
+        {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+
+            // Find any already-existing standard line styles.
+            var result = GetMatchingLineStyles(doc, FireRatingStandards.StandardRatings);
+
+            var missing = FireRatingStandards.StandardRatings
+                .Where(r => !result.ContainsKey(r))
+                .ToList();
+
+            if (missing.Count == 0) return result;
+
+            // Create a subcategory under OST_Lines for each missing rating name.
+            using (var tx = new Transaction(doc, "PDG: Create Fire Rating Line Styles"))
+            {
+                tx.Start();
+
+                var linesCategory = Category.GetCategory(doc, BuiltInCategory.OST_Lines);
+                if (linesCategory == null)
+                {
+                    PDGLogger.Warning(
+                        "PDG FireRatingLines: OST_Lines category not found — cannot create line styles.");
+                    tx.RollBack();
+                    return result;
+                }
+
+                foreach (var name in missing)
+                {
+                    var subCat = doc.Settings.Categories.NewSubcategory(linesCategory, name);
+                    var gs = subCat.GetGraphicsStyle(GraphicsStyleType.Projection);
+                    if (gs != null)
+                    {
+                        result[name] = gs;
+                        PDGLogger.Info($"PDG FireRatingLines: Created line style '{name}'.");
+                    }
+                    else
+                    {
+                        PDGLogger.Warning(
+                            $"PDG FireRatingLines: Created subcategory '{name}' but could not " +
+                            $"retrieve its projection GraphicsStyle.");
+                    }
+                }
+
+                tx.Commit();
             }
 
             return result;
@@ -135,6 +205,9 @@ namespace PDG.Revit.FireRatingLines.Services
             Document doc,
             Dictionary<long, string> wallTypeIdToRating)
         {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (wallTypeIdToRating == null) throw new ArgumentNullException(nameof(wallTypeIdToRating));
+
             var result = new List<FireRatingWall>();
             var seen   = new HashSet<(long, long)>();
 
@@ -362,7 +435,7 @@ namespace PDG.Revit.FireRatingLines.Services
 
                         var wall = doc.GetElement(fw.WallId) as Wall;
                         var view = doc.GetElement(fw.ViewId) as View;
-                        if (wall == null || view == null) continue;
+                        if (wall == null || !wall.IsValidObject || view == null || !view.IsValidObject) continue;
 
                         if (!(wall.Location is LocationCurve lc) || !(lc.Curve is Line line3d))
                         {
@@ -383,7 +456,7 @@ namespace PDG.Revit.FireRatingLines.Services
                         }
                         catch (Exception ex)
                         {
-                            Trace.TraceWarning(
+                            PDGLogger.Warning(
                                 $"PDG FireRatingLines: NewDetailCurve failed for wall " +
                                 $"Id={fw.WallId.Value} in view Id={fw.ViewId.Value}. {ex.Message}");
                         }
@@ -575,7 +648,7 @@ namespace PDG.Revit.FireRatingLines.Services
                     try { doc.Delete(id); deleted++; }
                     catch (Exception ex)
                     {
-                        Trace.TraceWarning(
+                        PDGLogger.Warning(
                             $"PDG FireRatingLines: Could not delete detail line Id={id.Value}. {ex.Message}");
                     }
                 }
