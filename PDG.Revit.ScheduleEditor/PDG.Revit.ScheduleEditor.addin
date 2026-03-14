@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+
+  <!-- Application: loads on Revit startup, registers the Schedule Editor ribbon button -->
+  <AddIn Type="Application">
+    <Name>PDG Schedule Editor</Name>
+    <Assembly>PDG.Revit.ScheduleEditor.dll</Assembly>
+    <AddInId>A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D</AddInId>
+    <FullClassName>PDG.Revit.ScheduleEditor.App</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+  </AddIn>
+
+  <!-- Command: exposes the schedule editor command to Revit's shortcut manager -->
+  <AddIn Type="Command">
+    <Name>PDG Schedule Editor</Name>
+    <Assembly>PDG.Revit.ScheduleEditor.dll</Assembly>
+    <AddInId>B2C3D4E5-F6A7-4B8C-9D0E-1F2A3B4C5D6E</AddInId>
+    <FullClassName>PDG.Revit.ScheduleEditor.Commands.ScheduleEditorCmd</FullClassName>
+    <VendorId>PDG</VendorId>
+    <VendorDescription>Peake Design Group</VendorDescription>
+    <Text>Schedule Editor</Text>
+    <Description>Open any ViewSchedule in an editable WPF grid and write changes back to Revit.</Description>
+    <LongDescription>Opens a schedule picker listing all ViewSchedules in the active document.  Select one and click Open to launch the Schedule Editor — a Google Sheets-style grid backed by Syncfusion SfDataGrid.  Edit cells directly and click Apply to write all changes back in a single transaction.</LongDescription>
+    <VisibilityMode>NotVisibleWhenNoActiveDocument</VisibilityMode>
+  </AddIn>
+
+</RevitAddIns>

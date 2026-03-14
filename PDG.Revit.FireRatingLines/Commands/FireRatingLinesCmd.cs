@@ -21,7 +21,7 @@ namespace PDG.Revit.FireRatingLines.Commands
     // PDG API NOTE 2026-03-01: [Transaction(TransactionMode.Manual)]
     //   Verified: revitapidocs.com/2024/ — required; the service manages its own transactions.
     // PDG API NOTE 2026-03-01: [Regeneration(RegenerationOption.Manual)]
-    //   Verified: revitapidocs.com/2024/ — suppress automatic document regeneration between API calls.
+    //   Verified: revitapidocs.com/2024/ — suppresses automatic document regeneration.
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
     public class FireRatingLinesCmd : IExternalCommand
@@ -33,7 +33,7 @@ namespace PDG.Revit.FireRatingLines.Commands
         {
             try
             {
-                // ── Guard: require an open document ──────────────────────────
+                // ── Guard: require an open document ──────────────────────────────
                 var doc = commandData.Application.ActiveUIDocument?.Document;
                 if (doc == null)
                 {
@@ -55,8 +55,12 @@ namespace PDG.Revit.FireRatingLines.Commands
                 // Returns Dictionary<long wallTypeId, string ratingKey> for ALL rated types.
                 var wallTypeIdToRating = service.GetFireRatedWallTypes(doc);
 
-                // F-10 guard: exit cleanly with guidance if no fire-rated types found.
-                if (wallTypeIdToRating.Count == 0)
+                // ── Stage A: Discover fire-rated floor/ceiling/roof types ─────────
+                // Returns Dictionary<long typeId, string ratingKey> for ALL rated types.
+                var horzTypeIdToRating = service.GetFireRatedHorizontalTypes(doc);
+
+                // ── F-10 guard: exit cleanly if nothing is rated in this document ──
+                if (wallTypeIdToRating.Count == 0 && horzTypeIdToRating.Count == 0)
                 {
                     TaskDialog.Show(
                         "PDG: Fire Rating Lines",
@@ -71,17 +75,27 @@ namespace PDG.Revit.FireRatingLines.Commands
                 // ── Stage 3: Collect walls in sheeted views ───────────────────
                 var wallsInViews = service.GetFireRatedWallsInViews(doc, wallTypeIdToRating);
 
-                // ── Stage 4: Delete old lines + draw new lines ────────────────
-                var result = service.DrawFireRatingLines(doc, wallsInViews, lineStyles);
+                // ── Stage B: Collect fire-rated floors/ceilings/roofs in sheeted sections ─
+                var horizontalInViews = service.GetFireRatedHorizontalElementsInSectionViews(
+                    doc, horzTypeIdToRating, out int skippedSlopedRoofs);
 
-                // ── F-09: TaskDialog summary ──────────────────────────────────
+                // ── Stage 4: Delete old lines + draw new lines (single TransactionGroup) ─
+                var result = service.DrawFireRatingLines(
+                    doc, wallsInViews, horizontalInViews, lineStyles, skippedSlopedRoofs);
+
+                // ── TaskDialog summary ────────────────────────────────────────────
                 var sb = new StringBuilder();
-                sb.AppendLine($"Lines drawn:     {result.LinesDrawn}");
-                sb.AppendLine($"Lines deleted:   {result.LinesDeleted}");
-                sb.AppendLine($"Walls processed: {result.WallsProcessed}");
+                sb.AppendLine($"Wall lines drawn:         {result.LinesDrawn}");
+                sb.AppendLine($"Horizontal lines drawn:   {result.HorizontalLinesDrawn}");
+                sb.AppendLine($"Lines deleted:            {result.LinesDeleted}");
+                sb.AppendLine($"Walls processed:          {result.WallsProcessed}");
+                sb.AppendLine($"H-elements processed:     {result.HorizontalElementsProcessed}");
 
                 if (result.SkippedCurvedWalls > 0)
                     sb.AppendLine($"Curved walls skipped (v1 — straight walls only): {result.SkippedCurvedWalls}");
+
+                if (result.SkippedSlopedRoofs > 0)
+                    sb.AppendLine($"Sloped roofs skipped (v1 — flat roofs only): {result.SkippedSlopedRoofs}");
 
                 if (result.UnmatchedRatings.Count > 0)
                 {

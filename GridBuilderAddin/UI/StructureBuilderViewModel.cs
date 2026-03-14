@@ -148,13 +148,7 @@ namespace GridBuilderAddin.UI
         }
 
         // ── Perimeter columns ─────────────────────────────────────────────────
-
-        private bool _hasPerimeterColumns = false;
-        public bool HasPerimeterColumns
-        {
-            get => _hasPerimeterColumns;
-            set { _hasPerimeterColumns = value; OnPropertyChanged(); Revalidate(); }
-        }
+        // Perimeter columns are always placed — no optional toggle.
 
         private FamilyTypeItem? _perimeterColumnType;
         public FamilyTypeItem? PerimeterColumnType
@@ -188,13 +182,7 @@ namespace GridBuilderAddin.UI
         }
 
         // ── Interior columns ──────────────────────────────────────────────────
-
-        private bool _hasInteriorColumns = false;
-        public bool HasInteriorColumns
-        {
-            get => _hasInteriorColumns;
-            set { _hasInteriorColumns = value; OnPropertyChanged(); Revalidate(); }
-        }
+        // Interior (field) columns are always placed — no optional toggle.
 
         private FamilyTypeItem? _interiorColumnType;
         public FamilyTypeItem? InteriorColumnType
@@ -239,9 +227,11 @@ namespace GridBuilderAddin.UI
             foreach (var x in levelItems  ?? Enumerable.Empty<FamilyTypeItem>()) LevelItems.Add(x);
 
             // Pre-select first available items
-            SelectedFloorType = FloorTypes.FirstOrDefault();
-            SelectedRoofType  = RoofTypes.FirstOrDefault();
-            SelectedWallType  = WallTypes.FirstOrDefault();
+            SelectedFloorType    = FloorTypes.FirstOrDefault();
+            SelectedRoofType     = RoofTypes.FirstOrDefault();
+            SelectedWallType     = WallTypes.FirstOrDefault();
+            PerimeterColumnType  = ColumnTypes.FirstOrDefault();
+            InteriorColumnType   = ColumnTypes.FirstOrDefault();
 
             // Pre-select bottom and top levels sensibly
             ColumnBottomLevel = WallBottomLevel = FloorLevel = LevelItems.FirstOrDefault();
@@ -310,14 +300,14 @@ namespace GridBuilderAddin.UI
                 ColumnTopLevelId         = ColumnTopLevel?.Id    ?? 0,
                 ColumnTopOffsetMm        = colTopOff,
 
-                HasPerimeterColumns      = _hasPerimeterColumns,
+                HasPerimeterColumns      = true,   // always placed
                 PerimeterColumnTypeId    = PerimeterColumnType?.Id ?? 0,
                 PerimeterInteriorOffsetMm = Math.Max(0, perimOff),
 
                 HasMidpointColumns       = _hasMidpointColumns,
                 MidpointColumnTypeId     = MidpointColumnType?.Id ?? 0,
 
-                HasInteriorColumns       = _hasInteriorColumns,
+                HasInteriorColumns       = true,   // always placed
                 InteriorColumnTypeId     = InteriorColumnType?.Id ?? 0
             };
         }
@@ -355,29 +345,23 @@ namespace GridBuilderAddin.UI
             if (WallTopLevel == null)
                 return "Select a top level for exterior walls.";
 
-            // Require at least one column option if column levels are set
-            bool anyColumn = _hasPerimeterColumns || _hasMidpointColumns || _hasInteriorColumns;
-            if (anyColumn)
-            {
-                if (ColumnBottomLevel == null)
-                    return "Select a base level for structural columns.";
-                if (ColumnTopLevel == null)
-                    return "Select a top level for structural columns.";
-            }
+            // Perimeter and interior columns are always required.
+            // Midpoint (half-grid perimeter) columns are optional.
+            if (ColumnBottomLevel == null)
+                return "Select a base level for structural columns.";
+            if (ColumnTopLevel == null)
+                return "Select a top level for structural columns.";
 
-            if (_hasPerimeterColumns)
-            {
-                if (PerimeterColumnType == null)
-                    return "Select a column type for perimeter columns.";
-                if (!double.TryParse(PerimeterOffsetText, out var perimOff) || perimOff < 0)
-                    return "Perimeter column offset must be a non-negative number.";
-            }
+            if (PerimeterColumnType == null)
+                return "Select a column type for perimeter columns.";
+            if (!double.TryParse(PerimeterOffsetText, out var perimOff) || perimOff < 0)
+                return "Perimeter column offset must be a non-negative number.";
 
             if (_hasMidpointColumns && MidpointColumnType == null)
                 return "Select a column type for midpoint perimeter columns.";
 
-            if (_hasInteriorColumns && InteriorColumnType == null)
-                return "Select a column type for interior columns.";
+            if (InteriorColumnType == null)
+                return "Select a column type for interior (field) columns.";
 
             return string.Empty;
         }
