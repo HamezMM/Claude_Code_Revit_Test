@@ -139,17 +139,6 @@
                         CommandParameter="{Binding}"
                         ToolTip="Remove this level"
                         Visibility="{Binding IsExisting, Converter={StaticResource BoolToVis}}">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
-                            <!-- Hide when IsExisting=True (inverse of BoolToVis) -->
-                            <Setter Property="Visibility" Value="Visible"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsExisting}" Value="True">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
                 </Button>
 
             </Grid>
