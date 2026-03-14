@@ -10,85 +10,67 @@ using System.Linq;
 namespace PDG.Revit.FireRatingLines.Services
 {
     /// <summary>
-    /// Encapsulates all four stages of the fire-rating lines workflow:
-    /// 1. Discover fire-rated wall types — returns wallTypeId → ratingKey for every rated type.
-    /// 2. Resolve matching GraphicsStyle line styles.
-    /// 3. Collect fire-rated walls visible in any non-template plan/section view.
-    /// 4. Delete stale lines and draw fresh detail lines.
+    /// Encapsulates all stages of the fire-rating lines workflow:
+    ///   Stage 1  — Discover fire-rated WallTypes.
+    ///   Stage 2  — Resolve matching GraphicsStyle line styles.
+    ///   Stage 3  — Collect fire-rated walls in sheeted plan + section views.
+    ///   Stage A  — Discover fire-rated FloorTypes, CeilingTypes, RoofTypes.
+    ///   Stage B  — Collect fire-rated floors/ceilings/roofs in sheeted section views.
+    ///   Stage 4  — Delete stale lines and draw fresh detail lines for all element types
+    ///              inside a single TransactionGroup (one Undo entry).
     /// </summary>
     public class FireRatingLinesService
     {
-        // ─────────────────────────────────────────────────────────────────────
+        // =====================================================================
         // Stage 1 — Fire-Rated WallType Discovery
-        // ─────────────────────────────────────────────────────────────────────
+        // =====================================================================
 
         /// <summary>
         /// Returns a mapping of WallType.Id.Value → trimmed fire rating key for every WallType
-        /// in the document whose Fire Rating type parameter is non-null and non-empty.
-        ///
-        /// Using wallTypeId as key (rather than ratingKey) ensures that ALL rated wall types
-        /// are represented — including multiple wall types that share the same rating string.
-        /// Stage 3 consumes this dictionary directly for O(1) wall-type lookup.
-        /// Stage 2 receives the unique rating keys via .Values.Distinct().
+        /// in the document whose WALL_ATTR_FIRE_RATING_PARAM is non-null and non-empty.
+        /// Using wallTypeId as key ensures ALL rated wall types are represented, including
+        /// multiple types that share the same rating string.
         /// </summary>
         // PDG API NOTE 2026-03-01: FilteredElementCollector.OfClass(typeof(WallType)).WhereElementIsElementType()
         //   Verified: revitapidocs.com/2024/ — returns WallType elements only.
-        // PDG API NOTE 2026-03-01: BuiltInParameter.DOOR_FIRE_RATING
-        //   Verified: revitapidocs.com/2024/ — DOOR_FIRE_RATING is the correct built-in enum member
-        //   for the "Fire Rating" type parameter on WallType (and Door) elements in Revit 2024.
-        //   The earlier WALL_ATTR_FIRE_RATING_PARAM name does not exist in the Revit 2024 API.
-        //   get_Parameter(BuiltInParameter) is locale-independent and always preferred over
-        //   LookupParameter("Fire Rating"), which searches by display name and may return null
-        //   in non-English Revit installations or on types where no value has been set yet.
-        //   LookupParameter("Fire Rating") is kept as a fallback to support shared/project
-        //   parameters added under the same display name.
-        // PDG API NOTE 2026-03-01: ElementId.Value (Int64)
-        //   Use .Value throughout. Never deprecated .IntegerValue.
+        // PDG API NOTE 2026-03-01: wt.get_Parameter(BuiltInParameter.WALL_ATTR_FIRE_RATING_PARAM).AsString()
+        //   StorageType = String. Returns null if unset. Check null AND empty.
+        // PDG API NOTE 2026-03-01: ElementId.Value (Int64) — use throughout, never .IntegerValue.
         public Dictionary<long, string> GetFireRatedWallTypes(Document doc)
         {
             if (doc == null) throw new ArgumentNullException(nameof(doc));
 
             var result = new Dictionary<long, string>();
 
-            var wallTypes = new FilteredElementCollector(doc)
+            foreach (var wt in new FilteredElementCollector(doc)
                 .OfClass(typeof(WallType))
                 .WhereElementIsElementType()
-                .Cast<WallType>();
-
-            foreach (var wt in wallTypes)
+                .Cast<WallType>())
             {
-                // PDG API NOTE 2026-03-01: BuiltInParameter.DOOR_FIRE_RATING
-                //   Verified: revitapidocs.com/2024/ — primary lookup by internal enum (locale-safe).
-                //   LookupParameter("Fire Rating") is the fallback for shared/project parameters.
-                var param = wt.get_Parameter(BuiltInParameter.DOOR_FIRE_RATING)
-                          ?? wt.LookupParameter("Fire Rating");
-                if (param == null || param.StorageType != StorageType.String) continue;
-
-                var ratingValue = param.AsString();
-                if (string.IsNullOrWhiteSpace(ratingValue)) continue;
-
-                result[wt.Id.Value] = ratingValue.Trim();
+                var param = wt.get_Parameter(BuiltInParameter.WALL_ATTR_FIRE_RATING_PARAM);
+                if (param == null) continue;
+                var rating = param.AsString();
+                if (string.IsNullOrWhiteSpace(rating)) continue;
+                result[wt.Id.Value] = rating.Trim();
             }
 
             return result;
         }
 
-        // ─────────────────────────────────────────────────────────────────────
+        // =====================================================================
         // Stage 2 — Line Style Resolution
-        // ─────────────────────────────────────────────────────────────────────
+        // =====================================================================
 
         /// <summary>
         /// For each unique rating key, finds the GraphicsStyle (OST_Lines projection subcategory)
         /// whose name matches the key (case-insensitive, trimmed — F-11 enhanced).
-        /// Returns only the keys that have a matching style; unmatched keys are omitted and
-        /// the caller is responsible for recording them as warnings.
+        /// Accepts combined rating keys from both wall and horizontal element stages.
+        /// Returns only keys that have a match; unmatched keys are omitted (caller records them).
         /// </summary>
         // PDG API NOTE 2026-03-01: Category.GetCategory(doc, BuiltInCategory.OST_Lines)
-        //   Verified: revitapidocs.com/2024/ — returns the "Lines" drafting category.
+        //   Verified: revitapidocs.com/2024/ — returns the root "Lines" drafting category.
         // PDG API NOTE 2026-03-01: GraphicsStyleType.Projection
-        //   Verified: revitapidocs.com/2024/ — use Projection for detail lines (not Cut).
-        // PDG API NOTE 2026-03-01: gs.GraphicsStyleCategory.Id.Value
-        //   Use .Value (Int64) — never deprecated .IntegerValue.
+        //   Verified: revitapidocs.com/2024/ — Projection styles are used for detail lines.
         // PDG: Check shared/PDG.Revit.Shared/ — GetLineStyleByName() may already exist.
         public Dictionary<string, GraphicsStyle> GetMatchingLineStyles(
             Document doc,
@@ -99,7 +81,6 @@ namespace PDG.Revit.FireRatingLines.Services
 
             var result = new Dictionary<string, GraphicsStyle>(StringComparer.OrdinalIgnoreCase);
 
-            // Get the ElementId of the OST_Lines drafting category.
             var ostLinesCategory = Category.GetCategory(doc, BuiltInCategory.OST_Lines);
             if (ostLinesCategory == null)
             {
@@ -108,10 +89,6 @@ namespace PDG.Revit.FireRatingLines.Services
             }
             long ostLinesId = ostLinesCategory.Id.Value;
 
-            // Collect all projection GraphicsStyles that belong to OST_Lines or its subcategories.
-            // Line styles in Revit are stored as GraphicsStyle elements whose category is either:
-            //   - OST_Lines itself (for built-in "Lines" style), or
-            //   - a subcategory of OST_Lines (for user-defined line styles in Settings > Line Styles).
             var allStyles = new FilteredElementCollector(doc)
                 .OfClass(typeof(GraphicsStyle))
                 .Cast<GraphicsStyle>()
@@ -120,20 +97,17 @@ namespace PDG.Revit.FireRatingLines.Services
                     if (gs.GraphicsStyleType != GraphicsStyleType.Projection) return false;
                     var cat = gs.GraphicsStyleCategory;
                     if (cat == null) return false;
-                    // Direct OST_Lines membership.
                     if (cat.Id.Value == ostLinesId) return true;
-                    // Subcategory of OST_Lines (user-defined line styles).
                     if (cat.Parent != null && cat.Parent.Id.Value == ostLinesId) return true;
                     return false;
                 })
                 .ToList();
 
-            // F-11 enhanced: case-insensitive + trimmed name match.
             foreach (var key in ratingKeys.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                var trimmedKey = key.Trim();
+                var trimmed = key.Trim();
                 var match = allStyles.FirstOrDefault(gs =>
-                    string.Equals(gs.Name.Trim(), trimmedKey, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(gs.Name.Trim(), trimmed, StringComparison.OrdinalIgnoreCase));
 
                 if (match != null)
                     result[key] = match;
@@ -210,30 +184,23 @@ namespace PDG.Revit.FireRatingLines.Services
             return result;
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // Stage 3 — Walls in Sheeted Views
-        // ─────────────────────────────────────────────────────────────────────
+        // =====================================================================
+        // Stage 3 — Fire-Rated Walls in Sheeted Views (plan + section)
+        // =====================================================================
 
         /// <summary>
-        /// Collects all fire-rated wall instances that are visible in any non-template
-        /// FloorPlan, CeilingPlan, or Section view that is currently placed on a sheet.
-        /// Applies cut-plane straddling checks for plan views. Deduplicates by (wallId, viewId)
-        /// so each annotation is drawn exactly once even if a wall appears in multiple views.
+        /// Collects fire-rated wall instances visible in plan or section views on sheets.
+        /// Applies cut-plane straddling checks for plan views.
+        /// Deduplicates by (wallId, viewId).
         /// </summary>
-        // PDG API NOTE 2026-03-01: FilteredElementCollector(doc).OfClass(typeof(ViewSheet))
-        //   Verified: revitapidocs.com/2024/ — returns all ViewSheet elements.
-        //   sheet.GetAllViewports() returns the ElementIds of Viewport instances on the sheet.
-        //   Each Viewport.ViewId identifies the view displayed in that viewport.
+        // PDG API NOTE 2026-03-01: sheet.GetAllPlacedViews() — ICollection<ElementId>.
+        //   Verified: revitapidocs.com/2024/
         // PDG API NOTE 2026-03-01: new FilteredElementCollector(doc, view.Id).OfClass(typeof(Wall))
-        //   Verified: revitapidocs.com/2024/ — view-scoped collector returns elements visible in that view.
-        //   ⚠ CRITICAL: This includes walls shown in projection below the cut plane.
-        //   The straddling check is mandatory to annotate only walls that are actually cut.
+        //   ⚠ Returns walls visible in projection too — straddling check is mandatory.
         // PDG API NOTE 2026-03-01: ViewPlan.GetViewRange().GetOffset(PlanViewPlane.CutPlane)
-        //   Verified: revitapidocs.com/2024/ — returns vertical offset from associated level.
-        // PDG API NOTE 2026-03-01: wall.get_BoundingBox(null) — world-space bounding box.
-        //   Verified: revitapidocs.com/2024/ — pass null for world space (not view-local).
-        // TODO v2: RevitLinkInstance support — walls in linked models are not collected here.
-        //   See RevitLinkInstance.GetTotalTransform() for the v2 approach.
+        //   Verified: revitapidocs.com/2024/ — offset relative to associated level.
+        // TODO v2: RevitLinkInstance support — walls in linked models not collected here.
+        // PDG: Check shared/PDG.Revit.Shared/ — GetSheetedViews() may already exist.
         public List<FireRatingWall> GetFireRatedWallsInViews(
             Document doc,
             Dictionary<long, string> wallTypeIdToRating)
@@ -242,74 +209,34 @@ namespace PDG.Revit.FireRatingLines.Services
             if (wallTypeIdToRating == null) throw new ArgumentNullException(nameof(wallTypeIdToRating));
 
             var result = new List<FireRatingWall>();
-            // Dedup key: (wallId, viewId) — prevents drawing the same line twice if the
-            // same wall appears in multiple overlapping views or on multiple sheets.
-            var seen = new HashSet<(long wallId, long viewId)>();
+            var seen   = new HashSet<(long, long)>();
 
-            // Build the set of view IDs that are placed on at least one sheet.
-            // A view placed on two sheets still produces only one (wall, view) entry
-            // because the dedup set above handles it.
-            var sheetedViewIds = new HashSet<long>();
-            foreach (var sheet in new FilteredElementCollector(doc)
-                .OfClass(typeof(ViewSheet))
-                .Cast<ViewSheet>())
+            foreach (var view in GetSheetedViews(doc,
+                ViewType.FloorPlan, ViewType.CeilingPlan, ViewType.Section))
             {
-                foreach (var vpId in sheet.GetAllViewports())
-                {
-                    var vp = doc.GetElement(vpId) as Viewport;
-                    if (vp != null)
-                        sheetedViewIds.Add(vp.ViewId.Value);
-                }
-            }
-
-            // Collect non-template plan and section views that are placed on sheets.
-            var targetViews = new FilteredElementCollector(doc)
-                .OfClass(typeof(View))
-                .Cast<View>()
-                .Where(v => !v.IsTemplate &&
-                            sheetedViewIds.Contains(v.Id.Value) &&
-                            (v.ViewType == ViewType.FloorPlan ||
-                             v.ViewType == ViewType.CeilingPlan ||
-                             v.ViewType == ViewType.Section))
-                .ToList();
-
-            // For each view, collect walls and apply filters.
-            foreach (var view in targetViews)
-            {
-                // Determine cut-plane elevation for plan views.
                 double? cutElevation = null;
                 if (view.ViewType == ViewType.FloorPlan || view.ViewType == ViewType.CeilingPlan)
                 {
                     cutElevation = GetPlanCutElevation(view);
-                    if (cutElevation == null) continue; // malformed view range — skip
+                    if (cutElevation == null) continue;
                 }
 
-                var walls = new FilteredElementCollector(doc, view.Id)
+                foreach (var wall in new FilteredElementCollector(doc, view.Id)
                     .OfClass(typeof(Wall))
-                    .Cast<Wall>();
-
-                foreach (var wall in walls)
+                    .Cast<Wall>())
                 {
-                    // Filter: only fire-rated wall types.
-                    long wallTypeId = wall.WallType?.Id.Value ?? -1L;
-                    if (!wallTypeIdToRating.TryGetValue(wallTypeId, out var ratingKey)) continue;
+                    long typeId = wall.WallType?.Id.Value ?? -1L;
+                    if (!wallTypeIdToRating.TryGetValue(typeId, out var ratingKey)) continue;
+                    if (!seen.Add((wall.Id.Value, view.Id.Value))) continue;
 
-                    // Dedup check.
-                    var dedupKey = (wall.Id.Value, view.Id.Value);
-                    if (!seen.Add(dedupKey)) continue;
+                    if (cutElevation.HasValue && !WallStraddlesCutPlane(wall, cutElevation.Value))
+                        continue;
 
-                    // Plan view: straddling check.
-                    if (cutElevation.HasValue)
+                    if (wall.Location is LocationCurve lc && !(lc.Curve is Line))
                     {
-                        if (!WallStraddlesCutPlane(wall, cutElevation.Value)) continue;
-                    }
-
-                    // Curved-wall guard: skip Arc-based walls in v1.
-                    if (wall.Location is LocationCurve locCurve && !(locCurve.Curve is Line))
-                    {
-                        PDGLogger.Info(
+                        Trace.TraceInformation(
                             $"PDG FireRatingLines: Skipping curved wall Id={wall.Id.Value} " +
-                            $"in view Id={view.Id.Value} (Arc-based — v1 limitation).");
+                            $"in view Id={view.Id.Value} (v1 — straight walls only).");
                         continue;
                     }
 
@@ -320,81 +247,197 @@ namespace PDG.Revit.FireRatingLines.Services
             return result;
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // Stage 4 — Draw Detail Lines
-        // ─────────────────────────────────────────────────────────────────────
+        // =====================================================================
+        // Stage A — Fire-Rated Horizontal Type Discovery (Floor / Ceiling / Roof)
+        // =====================================================================
 
         /// <summary>
-        /// Deletes all existing fire-rating detail lines then draws fresh ones.
-        /// Wrapped in a TransactionGroup → two named Transactions → Assimilate()
-        /// so the user gets a single Undo entry in Revit's undo stack.
+        /// Returns a mapping of type element Id.Value → trimmed fire rating key for every
+        /// FloorType, CeilingType, and RoofType whose "Fire Rating" parameter is non-empty.
+        /// All three Revit type classes are collected in a single pass and merged.
         /// </summary>
-        // PDG API NOTE 2026-03-01: doc.Create.NewDetailCurve(view, curve)
-        //   Verified: revitapidocs.com/2024/ — curve MUST lie in the view's sketch plane.
-        //   For plan views: flatten Z to GenLevel.Elevation.
-        //   For section views: use Z=0 in view-local space, then CropBox.Transform.
-        // PDG API NOTE 2026-03-01: CurveElement.LineStyle (property setter)
-        //   Verified: revitapidocs.com/2024/ — accepts a GraphicsStyle element.
+        // PDG API NOTE 2026-03-01: FilteredElementCollector.OfClass(typeof(FloorType))
+        //   Verified: revitapidocs.com/2024/ — FloorType in Autodesk.Revit.DB namespace.
+        // PDG API NOTE 2026-03-01: FilteredElementCollector.OfClass(typeof(CeilingType))
+        //   ⚠ In Revit <2023 this was Autodesk.Revit.DB.Architecture.CeilingType.
+        //   Verify CeilingType is in the root DB namespace for Revit 2024.
+        //   Fallback if class not found: OfCategory(OST_Ceilings).WhereElementIsElementType().
+        // PDG API NOTE 2026-03-01: FilteredElementCollector.OfClass(typeof(RoofType))
+        //   Verified: revitapidocs.com/2024/ — RoofType is the common base; collects both
+        //   FootPrintRoofType and ExtrusionRoofType subtypes automatically.
+        // PDG API NOTE 2026-03-01: Element.LookupParameter("Fire Rating")
+        //   Used because no confirmed BuiltInParameter exists for Floor/Ceiling/Roof fire rating.
+        //   Verify against revitapidocs.com/2024/ whether FLOOR_ATTR_FIRE_RATING_PARAM or a
+        //   similar BIP exists; if so, prefer get_Parameter(BIP) over LookupParameter.
+        public Dictionary<long, string> GetFireRatedHorizontalTypes(Document doc)
+        {
+            var result = new Dictionary<long, string>();
+
+            CollectRatedTypes<FloorType>(doc, typeof(FloorType), result);
+            CollectRatedTypes<CeilingType>(doc, typeof(CeilingType), result);
+            CollectRatedTypes<RoofType>(doc, typeof(RoofType), result);
+
+            return result;
+        }
+
+        // =====================================================================
+        // Stage B — Fire-Rated Horizontal Elements in Sheeted Section Views
+        // =====================================================================
+
+        /// <summary>
+        /// Collects fire-rated Floor, Ceiling, and RoofBase instances visible in sheeted
+        /// section views only (plan views are out of scope for horizontal elements).
+        /// Sloped roofs (ExtrusionRoof or pitched FootPrintRoof) are skipped and logged.
+        /// Deduplicates by (elementId, viewId).
+        /// </summary>
+        // PDG API NOTE 2026-03-01: FilteredElementCollector(doc, viewId).OfClass(typeof(Floor))
+        //   Verified: revitapidocs.com/2024/ — Floor in Autodesk.Revit.DB namespace.
+        // PDG API NOTE 2026-03-01: FilteredElementCollector(doc, viewId).OfClass(typeof(Ceiling))
+        //   ⚠ Verify Ceiling class namespace in Revit 2024 (may be DB.Architecture.Ceiling pre-2023).
+        //   Fallback: OfCategory(OST_Ceilings).WhereElementIsNotElementType().
+        // PDG API NOTE 2026-03-01: FilteredElementCollector(doc, viewId).OfClass(typeof(RoofBase))
+        //   Verified: revitapidocs.com/2024/ — RoofBase is the common base class for all roof instances.
+        // PDG API NOTE 2026-03-01: element.GetTypeId()
+        //   Verified: revitapidocs.com/2024/ — returns the ElementId of the element's type.
+        // TODO v2: RevitLinkInstance support — horizontal elements in linked models not collected here.
+        public List<FireRatingHorizontalElement> GetFireRatedHorizontalElementsInSectionViews(
+            Document doc,
+            Dictionary<long, string> typeIdToRating,
+            out int skippedSlopedRoofs)
+        {
+            var result = new List<FireRatingHorizontalElement>();
+            var seen   = new HashSet<(long, long)>();
+            skippedSlopedRoofs = 0;
+
+            foreach (var view in GetSheetedViews(doc, ViewType.Section))
+            {
+                // Floors
+                foreach (var floor in new FilteredElementCollector(doc, view.Id)
+                    .OfClass(typeof(Floor))
+                    .Cast<Floor>())
+                {
+                    TryAddHorizontalElement(floor, view, typeIdToRating,
+                        HorizontalElementCategory.Floor, seen, result);
+                }
+
+                // Ceilings
+                foreach (var ceiling in new FilteredElementCollector(doc, view.Id)
+                    .OfClass(typeof(Ceiling))
+                    .Cast<Ceiling>())
+                {
+                    TryAddHorizontalElement(ceiling, view, typeIdToRating,
+                        HorizontalElementCategory.Ceiling, seen, result);
+                }
+
+                // Roofs — slope detection before adding
+                foreach (var roof in new FilteredElementCollector(doc, view.Id)
+                    .OfClass(typeof(RoofBase))
+                    .Cast<RoofBase>())
+                {
+                    // ExtrusionRoof: always sloped — skip and count.
+                    if (roof is ExtrusionRoof)
+                    {
+                        Trace.TraceInformation(
+                            $"PDG FireRatingLines: Skipping ExtrusionRoof Id={roof.Id.Value} " +
+                            $"in view Id={view.Id.Value} (v1 — flat roofs only).");
+                        skippedSlopedRoofs++;
+                        continue;
+                    }
+
+                    // FootPrintRoof: skip if world bbox height exceeds compound structure width.
+                    if (IsSlopedRoof(doc, roof))
+                    {
+                        Trace.TraceInformation(
+                            $"PDG FireRatingLines: Skipping sloped FootPrintRoof Id={roof.Id.Value} " +
+                            $"in view Id={view.Id.Value} (v1 — flat roofs only).");
+                        skippedSlopedRoofs++;
+                        continue;
+                    }
+
+                    TryAddHorizontalElement(roof, view, typeIdToRating,
+                        HorizontalElementCategory.Roof, seen, result);
+                }
+            }
+
+            return result;
+        }
+
+        // =====================================================================
+        // Stage 4 — Draw Detail Lines (combined TransactionGroup — one Undo entry)
+        // =====================================================================
+
+        /// <summary>
+        /// Deletes all existing fire-rating detail lines then draws fresh ones for walls,
+        /// floors, ceilings, and roofs — all inside a single TransactionGroup so the user
+        /// gets one Undo entry in Revit's undo stack.
+        /// </summary>
         // PDG API NOTE 2026-03-01: TransactionGroup.Assimilate()
-        //   Verified: revitapidocs.com/2024/ — merges child transactions into one undo entry.
-        //   Both child transactions MUST be committed before calling Assimilate().
+        //   Verified: revitapidocs.com/2024/ — merges all child transactions into one undo entry.
+        //   Both child transactions must be committed before calling Assimilate().
+        // PDG API NOTE 2026-03-01: doc.Create.NewDetailCurve(view, curve)
+        //   Curve must lie in the view's sketch plane:
+        //     Plan views  → Z = GenLevel.Elevation (not cut-plane elevation).
+        //     Section views → Z = 0 in view-local space; use CropBox.Transform to world.
+        // PDG API NOTE 2026-03-01: CurveElement.LineStyle property setter
+        //   Verified: revitapidocs.com/2024/ — accepts a GraphicsStyle element.
         // PDG: Check shared/PDG.Revit.Shared/ — ProjectCurveToViewSketchPlane() may exist.
         public FireRatingLinesResult DrawFireRatingLines(
             Document doc,
-            List<FireRatingWall> wallsInViews,
-            Dictionary<string, GraphicsStyle> lineStyles)
+            List<FireRatingWall> walls,
+            List<FireRatingHorizontalElement> horizontalElements,
+            Dictionary<string, GraphicsStyle> lineStyles,
+            int skippedSlopedRoofs = 0)
         {
-            if (doc == null) throw new ArgumentNullException(nameof(doc));
-            if (wallsInViews == null) throw new ArgumentNullException(nameof(wallsInViews));
-            if (lineStyles == null) throw new ArgumentNullException(nameof(lineStyles));
+            var result = new FireRatingLinesResult
+            {
+                SkippedSlopedRoofs = skippedSlopedRoofs
+            };
 
-            var result = new FireRatingLinesResult();
+            // Record unmatched rating keys across all element types.
+            var allRatingKeys = walls.Select(w => w.RatingKey)
+                .Concat(horizontalElements.Select(h => h.RatingKey))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            result.UnmatchedRatings.AddRange(
+                allRatingKeys.Where(k => !lineStyles.ContainsKey(k)));
 
-            // Record which rating keys have no matching line style.
-            var unmatchedKeys = wallsInViews
-                .Select(w => w.RatingKey)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(k => !lineStyles.ContainsKey(k))
-                .ToList();
-            result.UnmatchedRatings.AddRange(unmatchedKeys);
-
-            // Build the set of fire-rating GraphicsStyle Ids for the delete sweep.
+            // Build set of fire-rating style Ids for the delete sweep.
             var fireRatingStyleIds = new HashSet<long>(
                 lineStyles.Values.Select(gs => gs.Id.Value));
 
-            // Collect view Ids that appear in wallsInViews (to scope the delete sweep).
-            var viewIds = wallsInViews.Select(w => w.ViewId).Distinct().ToList();
+            // Collect all view Ids that need a delete sweep (union of both element sets).
+            var allViewIds = walls.Select(w => w.ViewId)
+                .Concat(horizontalElements.Select(h => h.ViewId))
+                .Distinct()
+                .ToList();
 
             using (var tg = new TransactionGroup(doc, "PDG: Fire Rating Lines"))
             {
                 tg.Start();
 
-                // ── Transaction 1: Delete existing fire-rating detail lines ──────
+                // ── Transaction 1: Delete existing fire-rating detail lines ───────
                 using (var txDelete = new Transaction(doc, "PDG: Delete Existing Fire Rating Lines"))
                 {
                     txDelete.Start();
-                    result.LinesDeleted = DeleteExistingFireRatingLines(doc, viewIds, fireRatingStyleIds);
+                    result.LinesDeleted = DeleteExistingFireRatingLines(doc, allViewIds, fireRatingStyleIds);
                     txDelete.Commit();
                 }
 
-                // ── Transaction 2: Create fresh detail lines ─────────────────────
+                // ── Transaction 2: Create fresh detail lines ──────────────────────
                 using (var txCreate = new Transaction(doc, "PDG: Create Fire Rating Detail Lines"))
                 {
                     txCreate.Start();
 
-                    foreach (var fw in wallsInViews)
+                    // Walls (plan + section views)
+                    foreach (var fw in walls)
                     {
                         result.WallsProcessed++;
-
-                        // Skip walls whose rating has no matching line style.
                         if (!lineStyles.TryGetValue(fw.RatingKey, out var lineStyle)) continue;
 
                         var wall = doc.GetElement(fw.WallId) as Wall;
                         var view = doc.GetElement(fw.ViewId) as View;
                         if (wall == null || !wall.IsValidObject || view == null || !view.IsValidObject) continue;
 
-                        // Curved-wall guard (defensive second check).
-                        if (!(wall.Location is LocationCurve locCurve) || !(locCurve.Curve is Line line3d))
+                        if (!(wall.Location is LocationCurve lc) || !(lc.Curve is Line line3d))
                         {
                             result.SkippedCurvedWalls++;
                             continue;
@@ -402,14 +445,13 @@ namespace PDG.Revit.FireRatingLines.Services
 
                         try
                         {
-                            Curve? sketchCurve = fw.ViewType == ViewType.Section
-                                ? BuildSectionCurve(wall, view)
+                            var curve = fw.ViewType == ViewType.Section
+                                ? BuildVerticalSectionCurve(wall, view)
                                 : BuildPlanCurve(line3d, view);
+                            if (curve == null) continue;
 
-                            if (sketchCurve == null) continue;
-
-                            var detailLine = doc.Create.NewDetailCurve(view, sketchCurve);
-                            detailLine.LineStyle = lineStyle;
+                            var dl = doc.Create.NewDetailCurve(view, curve);
+                            dl.LineStyle = lineStyle;
                             result.LinesDrawn++;
                         }
                         catch (Exception ex)
@@ -417,6 +459,33 @@ namespace PDG.Revit.FireRatingLines.Services
                             PDGLogger.Warning(
                                 $"PDG FireRatingLines: NewDetailCurve failed for wall " +
                                 $"Id={fw.WallId.Value} in view Id={fw.ViewId.Value}. {ex.Message}");
+                        }
+                    }
+
+                    // Floors, Ceilings, Roofs (section views only)
+                    foreach (var fh in horizontalElements)
+                    {
+                        result.HorizontalElementsProcessed++;
+                        if (!lineStyles.TryGetValue(fh.RatingKey, out var lineStyle)) continue;
+
+                        var element = doc.GetElement(fh.ElementId);
+                        var view    = doc.GetElement(fh.ViewId) as View;
+                        if (element == null || view == null) continue;
+
+                        try
+                        {
+                            var curve = BuildHorizontalSectionCurve(element, view);
+                            if (curve == null) continue;
+
+                            var dl = doc.Create.NewDetailCurve(view, curve);
+                            dl.LineStyle = lineStyle;
+                            result.HorizontalLinesDrawn++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Trace.TraceWarning(
+                                $"PDG FireRatingLines: NewDetailCurve failed for " +
+                                $"{fh.Category} Id={fh.ElementId.Value} in view Id={fh.ViewId.Value}. {ex.Message}");
                         }
                     }
 
@@ -429,30 +498,141 @@ namespace PDG.Revit.FireRatingLines.Services
             return result;
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // Private Helpers
-        // ─────────────────────────────────────────────────────────────────────
+        // =====================================================================
+        // Private — Shared Helpers
+        // =====================================================================
 
         /// <summary>
-        /// Deletes all DetailCurve elements in the given views whose LineStyle is one of
-        /// the fire-rating styles. Returns the count of successfully deleted elements.
-        /// Per-element try/catch: protected or non-deletable elements are logged and skipped.
+        /// Returns deduplicated View elements of the requested ViewTypes that are placed
+        /// on at least one sheet. Non-template views only.
+        /// </summary>
+        // PDG: Check shared/PDG.Revit.Shared/ — GetSheetedViews() may already exist.
+        private static List<View> GetSheetedViews(Document doc, params ViewType[] viewTypes)
+        {
+            var allowedTypes = new HashSet<ViewType>(viewTypes);
+
+            var viewIds = new FilteredElementCollector(doc)
+                .OfClass(typeof(ViewSheet))
+                .Cast<ViewSheet>()
+                .SelectMany(s => s.GetAllPlacedViews())
+                .Select(id => id.Value)
+                .Distinct();
+
+            return viewIds
+                .Select(id => doc.GetElement(new ElementId(id)) as View)
+                .Where(v => v != null && !v.IsTemplate && allowedTypes.Contains(v.ViewType))
+                .ToList()!;
+        }
+
+        /// <summary>
+        /// Generic helper: collects all ElementType elements of type T, reads their
+        /// "Fire Rating" parameter, and adds typeId → ratingKey to the output dictionary.
+        /// </summary>
+        private static void CollectRatedTypes<T>(
+            Document doc,
+            Type collectorClass,
+            Dictionary<long, string> output)
+            where T : ElementType
+        {
+            foreach (var typeEl in new FilteredElementCollector(doc)
+                .OfClass(collectorClass)
+                .WhereElementIsElementType()
+                .Cast<T>())
+            {
+                var rating = GetFireRatingValue(typeEl);
+                if (rating != null)
+                    output[typeEl.Id.Value] = rating;
+            }
+        }
+
+        /// <summary>
+        /// Reads the "Fire Rating" parameter from an element type by name.
+        /// Returns the trimmed string value, or null if absent/empty.
+        /// LookupParameter is used because no confirmed BuiltInParameter exists for
+        /// Floor/Ceiling/Roof fire rating in Revit 2024.
+        /// </summary>
+        // PDG API NOTE 2026-03-01: Element.LookupParameter(string name)
+        //   Verified: revitapidocs.com/2024/ — searches by parameter name; returns first match.
+        //   Verify against revitapidocs.com/2024/ whether a BIP (e.g. FLOOR_ATTR_FIRE_RATING_PARAM)
+        //   exists for FloorType; if so, prefer get_Parameter(BuiltInParameter.X).
+        private static string? GetFireRatingValue(Element typeElement)
+        {
+            var param = typeElement.LookupParameter("Fire Rating");
+            if (param == null) return null;
+            var value = param.AsString();
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        /// <summary>
+        /// Attempts to add a horizontal element (floor/ceiling/roof) to the result list.
+        /// Looks up the element's type in typeIdToRating; skips if not rated or already seen.
+        /// </summary>
+        private static void TryAddHorizontalElement(
+            Element element,
+            View view,
+            Dictionary<long, string> typeIdToRating,
+            HorizontalElementCategory category,
+            HashSet<(long, long)> seen,
+            List<FireRatingHorizontalElement> output)
+        {
+            long typeId = element.GetTypeId().Value;
+            if (!typeIdToRating.TryGetValue(typeId, out var ratingKey)) return;
+            if (!seen.Add((element.Id.Value, view.Id.Value))) return;
+
+            output.Add(new FireRatingHorizontalElement(element.Id, view.Id, ratingKey, category));
+        }
+
+        /// <summary>
+        /// Returns true if a RoofBase instance is sloped (and therefore should be skipped in v1).
+        /// ExtrusionRoof is always sloped — caller must check this before calling IsSlopedRoof.
+        /// For FootPrintRoof: compares world-space bounding box height to the type's compound
+        /// structure width. If bbox height > compound width × 1.5, the roof is pitched.
+        /// Falls back to a 1.5-foot (≈ 450 mm) threshold when compound structure is unavailable.
+        /// </summary>
+        // PDG API NOTE 2026-03-01: RoofType.GetCompoundStructure().GetWidth()
+        //   Verified: revitapidocs.com/2024/ — GetCompoundStructure() may return null for
+        //   curtain roofs; GetWidth() returns total thickness in Revit internal feet.
+        // PDG API NOTE 2026-03-01: element.get_BoundingBox(null) — world-space bbox.
+        //   Verified: revitapidocs.com/2024/ — pass null for world space.
+        private static bool IsSlopedRoof(Document doc, RoofBase roof)
+        {
+            const double FallbackThresholdFeet = 1.5; // ≈ 450 mm
+
+            var worldBbox = roof.get_BoundingBox(null);
+            if (worldBbox == null) return false;
+
+            double bboxHeight = worldBbox.Max.Z - worldBbox.Min.Z;
+
+            var roofType = doc.GetElement(roof.GetTypeId()) as RoofType;
+            var compound = roofType?.GetCompoundStructure();
+            double threshold = compound != null
+                ? compound.GetWidth() * 1.5
+                : FallbackThresholdFeet;
+
+            return bboxHeight > threshold;
+        }
+
+        // =====================================================================
+        // Private — Delete Helper
+        // =====================================================================
+
+        /// <summary>
+        /// Deletes all DetailCurve elements in the given views whose LineStyle Id is in the
+        /// fire-rating style set. Per-element try/catch skips protected elements gracefully.
         /// </summary>
         // PDG API NOTE 2026-03-01: FilteredElementCollector(doc, viewId).OfClass(typeof(CurveElement))
-        //   Verified: revitapidocs.com/2024/ — CurveElement is base class for DetailCurve and ModelCurve.
+        //   CurveElement is the base class for both DetailCurve and ModelCurve.
         //   Must check `is DetailCurve` to avoid deleting model lines.
         // PDG API NOTE 2026-03-01: doc.Delete(ElementId)
-        //   Verified: revitapidocs.com/2024/ — throws InvalidOperationException if element is protected.
+        //   Verified: revitapidocs.com/2024/ — throws if element is protected or non-deletable.
         private static int DeleteExistingFireRatingLines(
             Document doc,
             IEnumerable<ElementId> viewIds,
             HashSet<long> fireRatingStyleIds)
         {
             int deleted = 0;
-
             foreach (var viewId in viewIds)
             {
-                // Materialise to a list before deletion to avoid modifying the collection mid-flight.
                 var toDelete = new FilteredElementCollector(doc, viewId)
                     .OfClass(typeof(CurveElement))
                     .Cast<CurveElement>()
@@ -465,11 +645,7 @@ namespace PDG.Revit.FireRatingLines.Services
 
                 foreach (var id in toDelete)
                 {
-                    try
-                    {
-                        doc.Delete(id);
-                        deleted++;
-                    }
+                    try { doc.Delete(id); deleted++; }
                     catch (Exception ex)
                     {
                         PDGLogger.Warning(
@@ -477,115 +653,109 @@ namespace PDG.Revit.FireRatingLines.Services
                     }
                 }
             }
-
             return deleted;
         }
 
+        // =====================================================================
+        // Private — Geometry Helpers
+        // =====================================================================
+
         /// <summary>
-        /// Projects a wall's 3-D centreline onto the plan view's sketch plane.
-        /// The sketch plane for a FloorPlan / CeilingPlan is at Z = GenLevel.Elevation.
-        /// ⚠ CRITICAL: Do NOT use cut-plane elevation — the sketch plane is at the level.
-        /// Returns null if the flattened line is degenerate (zero length).
+        /// Projects a wall's 3-D centreline onto the plan view sketch plane (Z = GenLevel.Elevation).
+        /// ⚠ Do NOT use cut-plane elevation — the sketch plane sits at the level, not the cut.
+        /// Returns null if the flattened line is degenerate.
         /// </summary>
-        // PDG API NOTE 2026-03-01: ViewPlan.GenLevel.Elevation
-        //   Verified: revitapidocs.com/2024/ — elevation of the level associated with the view, in feet.
-        // PDG: Check shared/PDG.Revit.Shared/ — ProjectCurveToViewSketchPlane() may already exist.
+        // PDG API NOTE 2026-03-01: ViewPlan.GenLevel.Elevation — in Revit internal feet.
+        // PDG: Check shared/PDG.Revit.Shared/ — ProjectCurveToViewSketchPlane() may exist.
         private static Curve? BuildPlanCurve(Line line3d, View view)
         {
-            var viewPlan = (ViewPlan)view;
-            double levelZ = viewPlan.GenLevel.Elevation;
-
+            double z = ((ViewPlan)view).GenLevel.Elevation;
             var p0 = line3d.GetEndPoint(0);
             var p1 = line3d.GetEndPoint(1);
-
-            var flatStart = new XYZ(p0.X, p0.Y, levelZ);
-            var flatEnd   = new XYZ(p1.X, p1.Y, levelZ);
-
-            if (flatStart.DistanceTo(flatEnd) < 1e-6)
-            {
-                PDGLogger.Warning("PDG FireRatingLines: Degenerate (zero-length) plan curve — skipped.");
-                return null;
-            }
-
-            return Line.CreateBound(flatStart, flatEnd);
+            var a  = new XYZ(p0.X, p0.Y, z);
+            var b  = new XYZ(p1.X, p1.Y, z);
+            if (a.DistanceTo(b) < 1e-6) return null;
+            return Line.CreateBound(a, b);
         }
 
         /// <summary>
-        /// Builds a detail-line curve in a section view at the wall's centreline.
-        /// The wall's bounding box in view-local coordinates gives horizontal extent (X)
-        /// and height (Y). We draw a vertical line at the wall's X midpoint, from bbox.Min.Y
-        /// to bbox.Max.Y, at Z=0 (on the view's sketch plane), then transform to world space
-        /// via CropBox.Transform.
+        /// Builds a VERTICAL detail-line curve for a wall in a section view.
+        /// The wall's view-local bounding box gives X extent (thickness) and Y extent (height).
+        /// We draw a vertical line at the X midpoint, spanning Min.Y → Max.Y, at Z = 0.
         /// Returns null if the bounding box is unavailable or the line is degenerate.
         /// </summary>
-        // PDG API NOTE 2026-03-01: wall.get_BoundingBox(view) — view-local bounding box.
-        //   Verified: revitapidocs.com/2024/ — returns bbox in view local coordinates when view is passed.
-        //   Returns null if the element is not visible in the view.
-        // PDG API NOTE 2026-03-01: View.CropBox.Transform
-        //   Verified: revitapidocs.com/2024/ — Transform from view local coords to world coords.
-        //   BasisZ = view depth direction. Z=0 in local space = the view's sketch plane.
-        private static Curve? BuildSectionCurve(Wall wall, View view)
+        // PDG API NOTE 2026-03-01: wall.get_BoundingBox(view) — view-local coords.
+        //   Z = 0 in local space = the section view's sketch plane.
+        //   view.CropBox.Transform maps local → world for NewDetailCurve.
+        private static Curve? BuildVerticalSectionCurve(Wall wall, View view)
         {
             var bbox = wall.get_BoundingBox(view);
+            if (bbox == null) return null;
+
+            double cx = (bbox.Min.X + bbox.Max.X) / 2.0;
+            var localBottom = new XYZ(cx, bbox.Min.Y, 0.0);
+            var localTop    = new XYZ(cx, bbox.Max.Y, 0.0);
+            if (localBottom.DistanceTo(localTop) < 1e-6) return null;
+
+            var t = view.CropBox.Transform;
+            return Line.CreateBound(t.OfPoint(localBottom), t.OfPoint(localTop));
+        }
+
+        /// <summary>
+        /// Builds a HORIZONTAL detail-line curve for a Floor, Ceiling, or Roof in a section view.
+        /// The element's view-local bounding box gives X extent (width in view) and Y extent (thickness).
+        /// We draw a horizontal line at the Y midpoint, spanning Min.X → Max.X, at Z = 0.
+        /// Returns null if the bounding box is unavailable or the line is degenerate.
+        /// </summary>
+        // PDG API NOTE 2026-03-01: element.get_BoundingBox(view) — view-local coords.
+        //   Z = 0 keeps the line on the section view's sketch plane.
+        //   CropBox.Transform.OfPoint() converts local → world coordinates.
+        // PDG: Check shared/PDG.Revit.Shared/ — ProjectCurveToViewSketchPlane() may exist.
+        private static Curve? BuildHorizontalSectionCurve(Element element, View view)
+        {
+            var bbox = element.get_BoundingBox(view);
             if (bbox == null)
             {
-                PDGLogger.Warning(
-                    $"PDG FireRatingLines: No bounding box for wall Id={wall.Id.Value} " +
+                Trace.TraceWarning(
+                    $"PDG FireRatingLines: No bounding box for element Id={element.Id.Value} " +
                     $"in section view Id={view.Id.Value} — skipped.");
                 return null;
             }
 
-            // Horizontal midpoint of the wall's cross-section in view-local space.
-            double centerX = (bbox.Min.X + bbox.Max.X) / 2.0;
-
-            // Z = 0 keeps the points on the view's sketch plane.
-            var localBottom = new XYZ(centerX, bbox.Min.Y, 0.0);
-            var localTop    = new XYZ(centerX, bbox.Max.Y, 0.0);
-
-            if (localBottom.DistanceTo(localTop) < 1e-6)
+            double cy = (bbox.Min.Y + bbox.Max.Y) / 2.0;
+            var localLeft  = new XYZ(bbox.Min.X, cy, 0.0);
+            var localRight = new XYZ(bbox.Max.X, cy, 0.0);
+            if (localLeft.DistanceTo(localRight) < 1e-6)
             {
-                PDGLogger.Warning(
-                    $"PDG FireRatingLines: Degenerate section curve for wall Id={wall.Id.Value} — skipped.");
+                Trace.TraceWarning(
+                    $"PDG FireRatingLines: Degenerate horizontal curve for element " +
+                    $"Id={element.Id.Value} — skipped.");
                 return null;
             }
 
-            // Transform from view-local to world coordinates.
-            var transform = view.CropBox.Transform;
-            var worldBottom = transform.OfPoint(localBottom);
-            var worldTop    = transform.OfPoint(localTop);
-
-            return Line.CreateBound(worldBottom, worldTop);
+            var t = view.CropBox.Transform;
+            return Line.CreateBound(t.OfPoint(localLeft), t.OfPoint(localRight));
         }
 
         /// <summary>
-        /// Returns the absolute cut-plane elevation (in Revit internal feet) for a plan view.
-        /// Returns null if the view range or associated level cannot be resolved.
+        /// Returns the absolute cut-plane elevation for a plan view, or null if unresolvable.
         /// </summary>
         // PDG API NOTE 2026-03-01: ViewPlan.GetViewRange().GetOffset(PlanViewPlane.CutPlane)
-        //   Verified: revitapidocs.com/2024/ — offset is relative to the associated level.
-        //   Absolute elevation = GenLevel.Elevation + offset.
+        //   Offset is relative to GenLevel.Elevation. Absolute = level + offset.
         private static double? GetPlanCutElevation(View view)
         {
-            if (!(view is ViewPlan viewPlan)) return null;
-
-            var level = viewPlan.GenLevel;
+            if (!(view is ViewPlan vp)) return null;
+            var level = vp.GenLevel;
             if (level == null) return null;
-
-            var viewRange = viewPlan.GetViewRange();
-            if (viewRange == null) return null;
-
-            double levelElevation = level.Elevation;
-            double cutOffset = viewRange.GetOffset(PlanViewPlane.CutPlane);
-            return levelElevation + cutOffset;
+            var range = vp.GetViewRange();
+            if (range == null) return null;
+            return level.Elevation + range.GetOffset(PlanViewPlane.CutPlane);
         }
 
-        /// <summary>
-        /// Returns true if the wall's world-space bounding box straddles the cut elevation.
-        /// A wall is "cut" if Min.Z &lt; cutElevation AND Max.Z &gt; cutElevation.
-        /// </summary>
+        /// <summary>Returns true if the wall's world bbox straddles the cut elevation.</summary>
         private static bool WallStraddlesCutPlane(Wall wall, double cutElevation)
         {
-            var bbox = wall.get_BoundingBox(null); // world space
+            var bbox = wall.get_BoundingBox(null);
             if (bbox == null) return false;
             return bbox.Min.Z < cutElevation && bbox.Max.Z > cutElevation;
         }
