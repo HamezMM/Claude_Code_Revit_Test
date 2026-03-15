@@ -207,6 +207,10 @@ namespace GridBuilderAddin.UI
         public ICommand BackCommand   { get; }
         public ICommand CancelCommand { get; }
 
+        // ── Captured config (snapshot taken in OnBuild before window teardown) ─
+
+        private StructureConfig? _capturedConfig;
+
         // ── Constructor ───────────────────────────────────────────────────────
 
         public StructureBuilderViewModel(
@@ -245,6 +249,9 @@ namespace GridBuilderAddin.UI
 
         private void OnBuild()
         {
+            // Snapshot the config NOW, before WPF window teardown writes null back
+            // through TwoWay ComboBox.SelectedItem bindings during Close().
+            _capturedConfig = BuildConfig();
             CloseAction = WindowCloseAction.Confirmed;
             RequestClose?.Invoke(this, EventArgs.Empty);
         }
@@ -264,10 +271,13 @@ namespace GridBuilderAddin.UI
         // ── Build config ──────────────────────────────────────────────────────
 
         /// <summary>
-        /// Constructs a <see cref="StructureConfig"/> from the current ViewModel state.
-        /// Call only when <see cref="IsValid"/> is <c>true</c>.
+        /// Returns the <see cref="StructureConfig"/> captured when the user clicked Build.
+        /// If called before the window confirms (unusual), falls back to reading live state.
         /// </summary>
-        public StructureConfig BuildConfig()
+        public StructureConfig BuildConfig() => _capturedConfig ?? BuildConfigFromState();
+
+        /// <summary>Reads the current ViewModel state into a new <see cref="StructureConfig"/>.</summary>
+        private StructureConfig BuildConfigFromState()
         {
             double.TryParse(FloorOffsetText,       out var floorOff);
             double.TryParse(RoofOffsetText,        out var roofOff);
