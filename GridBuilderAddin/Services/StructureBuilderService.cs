@@ -261,6 +261,12 @@ namespace GridBuilderAddin.Services
                                     wallTopLvlId, wallTopOffFt,
                                     x1, xN, y1, yM, wallOffsetFt);
 
+                // Force intermediate regeneration so wall geometry is committed to the
+                // model state before NewFootPrintRoof is called.  In the original
+                // 4-transaction design each commit triggered auto-regeneration; in the
+                // single-transaction design we must call it explicitly between steps.
+                doc.Regenerate();
+
                 step = "roof";
                 CreateRoof(doc, config, roofTypeId, roofLevelId,
                            floorXMin, floorXMax, floorYMin, floorYMax);
@@ -432,12 +438,18 @@ namespace GridBuilderAddin.Services
             // BuiltInParameter.ROOF_LEVEL_OFFSET_PARAM — revitapidocs.com/2024/
             roof.get_Parameter(BuiltInParameter.ROOF_LEVEL_OFFSET_PARAM)?.Set(offsetFt);
 
-            // Set slope of all profile curves to zero (flat roof)
-            foreach (ModelCurve mc in roofProfile)
+            // Set slope of all profile curves to zero (flat roof).
+            // Guard against Revit returning a ModelCurveArray whose internal backing store
+            // is null in some document states (iterating a null-backed array via foreach
+            // throws ArgumentNullException on Revit 2024).
+            if (roofProfile != null)
             {
-                // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
-                // ModelCurve parameters for slope — revitapidocs.com/2024/
-                mc.get_Parameter(BuiltInParameter.ROOF_SLOPE)?.Set(0.0);
+                for (int i = 0; i < roofProfile.Size; i++)
+                {
+                    // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
+                    // ModelCurve parameters for slope — revitapidocs.com/2024/
+                    roofProfile.get_Item(i)?.get_Parameter(BuiltInParameter.ROOF_SLOPE)?.Set(0.0);
+                }
             }
 
             Debug.WriteLine("[StructureBuilder] Footprint roof created.");
