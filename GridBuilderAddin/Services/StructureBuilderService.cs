@@ -19,9 +19,8 @@ namespace GridBuilderAddin.Services
     /// <list type="bullet">
     ///   <item>Fetching available floor, wall, roof, and structural column family types.</item>
     ///   <item>Creating the main slab, exterior walls, roof, and structural columns.</item>
-    ///   <item>Each element category is placed in its own transaction so that a failure
-    ///         in a later step (e.g. columns) does not roll back already-committed work
-    ///         (e.g. floor and walls).</item>
+    ///   <item>All element categories are placed in a single transaction per Building Builder
+    ///         window, so the model is either fully built or fully rolled back on failure.</item>
     /// </list>
     /// This class has no WPF dependency and no UI logic.
     /// </summary>
@@ -165,13 +164,13 @@ namespace GridBuilderAddin.Services
         /// <summary>
         /// Creates the base structure elements (slab, exterior walls, roof, and structural columns)
         /// described by <paramref name="config"/> in the active Revit document.
-        /// Each element category is placed inside its own independent transaction so that a
-        /// failure in a later step does not roll back the work already committed by earlier steps.
+        /// All four element types are placed inside a single transaction so the model is either
+        /// fully built or fully rolled back on failure.
         /// </summary>
         /// <param name="doc">The active Revit document.</param>
         /// <param name="gridConfig">Grid configuration from the Grid Builder step.</param>
         /// <param name="config">Structure configuration from the Structure Builder dialog.</param>
-        /// <returns><c>true</c> if all four transactions committed; <c>false</c> if any step failed
+        /// <returns><c>true</c> if the transaction committed; <c>false</c> if any step failed
         /// (an error dialog has already been shown identifying the failing step).</returns>
         public bool BuildStructure(Document doc, GridConfig gridConfig, StructureConfig config)
         {
@@ -232,157 +231,47 @@ namespace GridBuilderAddin.Services
             double floorYMax = y1 + wallOffsetFt - wallThickFt;  // northernmost (most positive y)
             double floorYMin = yM - wallOffsetFt + wallThickFt;  // southernmost (most negative y)
 
-            // ── Transaction 1: Floor ─────────────────────────────────────────
-            if (!ExecuteFloor(doc, config, floorTypeId, floorLevelId,
-                              floorXMin, floorXMax, floorYMin, floorYMax))
-                return false;
-
-            // ── Transaction 2: Exterior walls ────────────────────────────────
-            if (!ExecuteExteriorWalls(doc, config, wallTypeId, wallBotLvlId, wallBotOffFt,
-                                      wallTopLvlId, wallTopOffFt,
-                                      x1, xN, y1, yM, wallOffsetFt))
-                return false;
-
-            // ── Transaction 3: Roof ──────────────────────────────────────────
-            if (!ExecuteRoof(doc, config, roofTypeId, roofLevelId,
-                             floorXMin, floorXMax, floorYMin, floorYMax))
-                return false;
-
-            // ── Transaction 4: Structural columns ────────────────────────────
-            if (!ExecuteColumns(doc, config, colBotLvlId, colBotOffFt, colTopLvlId, colTopOffFt,
-                                xPositions, yMagnitudes, perimOffFt))
-                return false;
-
-            Debug.WriteLine("[StructureBuilder] All structure transactions committed successfully.");
-            return true;
-        }
-
-        // ── Per-step transaction wrappers ────────────────────────────────────
-        // Each method runs its element-creation helper inside its own transaction.
-        // If the helper throws, the transaction is rolled back and a TaskDialog is shown
-        // identifying exactly which step failed, leaving all previously committed steps intact.
-
-        private static bool ExecuteFloor(
-            Document doc, StructureConfig config,
-            ElementId floorTypeId, ElementId levelId,
-            double xMin, double xMax, double yMin, double yMax)
-        {
+            // ── Single transaction for all structure elements ─────────────────
+            // One transaction per Building Builder window: floor, walls, roof, and columns
+            // are all committed together so the model is either fully built or fully rolled back.
+            var step = "structure";
             // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
-            var transaction = new Transaction(doc, GridBuilderConstants.FloorTransactionName);
+            var transaction = new Transaction(doc, GridBuilderConstants.StructureTransactionName);
             try
             {
                 transaction.Start();
-                CreateFloor(doc, config, floorTypeId, levelId, xMin, xMax, yMin, yMax);
-                transaction.Commit();
-                Debug.WriteLine("[StructureBuilder] Floor transaction committed.");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[StructureBuilder] Floor transaction failed: {ex.Message}");
-                if (transaction.HasStarted() && !transaction.HasEnded())
-                    transaction.RollBack();
 
-                TaskDialog.Show(
-                    "Structure Builder — Floor Error",
-                    $"Failed to create the floor slab.\n\n" +
-                    $"Check that the selected floor type and host level are valid.\n\n" +
-                    $"Details:\n{ex.Message}");
-                return false;
-            }
-        }
+                step = "floor slab";
+                CreateFloor(doc, config, floorTypeId, floorLevelId,
+                            floorXMin, floorXMax, floorYMin, floorYMax);
 
-        private static bool ExecuteExteriorWalls(
-            Document doc, StructureConfig config,
-            ElementId wallTypeId, ElementId botLvlId, double botOffFt,
-            ElementId topLvlId, double topOffFt,
-            double x1, double xN, double y1, double yM, double wallOffsetFt)
-        {
-            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
-            var transaction = new Transaction(doc, GridBuilderConstants.WallsTransactionName);
-            try
-            {
-                transaction.Start();
-                CreateExteriorWalls(doc, config, wallTypeId, botLvlId, botOffFt, topLvlId, topOffFt,
+                step = "exterior walls";
+                CreateExteriorWalls(doc, config, wallTypeId, wallBotLvlId, wallBotOffFt,
+                                    wallTopLvlId, wallTopOffFt,
                                     x1, xN, y1, yM, wallOffsetFt);
-                transaction.Commit();
-                Debug.WriteLine("[StructureBuilder] Exterior walls transaction committed.");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[StructureBuilder] Exterior walls transaction failed: {ex.Message}");
-                if (transaction.HasStarted() && !transaction.HasEnded())
-                    transaction.RollBack();
 
-                TaskDialog.Show(
-                    "Structure Builder — Exterior Walls Error",
-                    $"Failed to create one or more exterior walls.\n\n" +
-                    $"Check that the selected wall type and level constraints are valid, " +
-                    $"and that the wall height (top level − bottom level) is greater than zero.\n\n" +
-                    $"Details:\n{ex.Message}");
-                return false;
-            }
-        }
+                step = "roof";
+                CreateRoof(doc, config, roofTypeId, roofLevelId,
+                           floorXMin, floorXMax, floorYMin, floorYMax);
 
-        private static bool ExecuteRoof(
-            Document doc, StructureConfig config,
-            ElementId roofTypeId, ElementId levelId,
-            double xMin, double xMax, double yMin, double yMax)
-        {
-            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
-            var transaction = new Transaction(doc, GridBuilderConstants.RoofTransactionName);
-            try
-            {
-                transaction.Start();
-                CreateRoof(doc, config, roofTypeId, levelId, xMin, xMax, yMin, yMax);
-                transaction.Commit();
-                Debug.WriteLine("[StructureBuilder] Roof transaction committed.");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[StructureBuilder] Roof transaction failed: {ex.Message}");
-                if (transaction.HasStarted() && !transaction.HasEnded())
-                    transaction.RollBack();
-
-                TaskDialog.Show(
-                    "Structure Builder — Roof Error",
-                    $"Failed to create the roof.\n\n" +
-                    $"Check that the selected roof type and host level are valid.\n\n" +
-                    $"Details:\n{ex.Message}");
-                return false;
-            }
-        }
-
-        private static bool ExecuteColumns(
-            Document doc, StructureConfig config,
-            ElementId colBotLvlId, double colBotOffFt,
-            ElementId colTopLvlId, double colTopOffFt,
-            List<double> xPositions, List<double> yMagnitudes, double perimOffFt)
-        {
-            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
-            var transaction = new Transaction(doc, GridBuilderConstants.ColumnsTransactionName);
-            try
-            {
-                transaction.Start();
+                step = "structural columns";
                 CreateColumns(doc, config, colBotLvlId, colBotOffFt, colTopLvlId, colTopOffFt,
                               xPositions, yMagnitudes, perimOffFt);
+
                 transaction.Commit();
-                Debug.WriteLine("[StructureBuilder] Columns transaction committed.");
+                Debug.WriteLine("[StructureBuilder] Structure transaction committed.");
                 return true;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[StructureBuilder] Columns transaction failed: {ex.Message}");
+                Debug.WriteLine($"[StructureBuilder] Structure transaction failed at {step}: {ex.Message}");
                 if (transaction.HasStarted() && !transaction.HasEnded())
                     transaction.RollBack();
 
                 TaskDialog.Show(
-                    "Structure Builder — Structural Columns Error",
-                    $"Failed to place one or more structural columns.\n\n" +
-                    $"Check that the selected column family types are loaded and activated, " +
-                    $"and that the base and top levels are valid.\n\n" +
+                    "Structure Builder — Error",
+                    $"Failed to create the {step}.\n\n" +
+                    $"Check that all selected types and levels are valid.\n\n" +
                     $"Details:\n{ex.Message}");
                 return false;
             }
