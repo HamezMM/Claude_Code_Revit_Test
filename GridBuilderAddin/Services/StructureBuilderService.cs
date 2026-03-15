@@ -164,13 +164,13 @@ namespace GridBuilderAddin.Services
         /// <summary>
         /// Creates the base structure elements (slab, exterior walls, roof, and structural columns)
         /// described by <paramref name="config"/> in the active Revit document.
-        /// All four element types are placed inside a single transaction so the model is either
-        /// fully built or fully rolled back on failure.
+        /// Each element category is placed in its own independently-committed transaction so that
+        /// a failure at any step leaves all previously-committed elements in the model.
         /// </summary>
         /// <param name="doc">The active Revit document.</param>
         /// <param name="gridConfig">Grid configuration from the Grid Builder step.</param>
         /// <param name="config">Structure configuration from the Structure Builder dialog.</param>
-        /// <returns><c>true</c> if the transaction committed; <c>false</c> if any step failed
+        /// <returns><c>true</c> if all four transactions committed; <c>false</c> if any step failed
         /// (an error dialog has already been shown identifying the failing step).</returns>
         public bool BuildStructure(Document doc, GridConfig gridConfig, StructureConfig config)
         {
@@ -242,24 +242,30 @@ namespace GridBuilderAddin.Services
             double floorYMax = y1 + wallOffsetFt - wallThickFt;  // northernmost (most positive y)
             double floorYMin = yM - wallOffsetFt + wallThickFt;  // southernmost (most negative y)
 
-            // ── Single transaction for all structure elements ─────────────────
-            // One transaction per Building Builder window: floor, walls, roof, and columns
-            // are all committed together so the model is either fully built or fully rolled back.
-            var step = "structure";
-            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
-            var transaction = new Transaction(doc, GridBuilderConstants.StructureTransactionName);
-            try
-            {
-                transaction.Start();
+            // ── Four independent transactions — one per element category ─────
+            // Each transaction commits before the next begins.  A failure at any step
+            // rolls back only that step; all previously-committed elements remain in the model.
 
-                step = "floor slab";
-                CreateFloor(doc, config, floorTypeId, floorLevelId,
-                            floorXMin, floorXMax, floorYMin, floorYMax);
+            if (!RunTransaction(doc, GridBuilderConstants.FloorTransactionName,
+                    () => CreateFloor(doc, config, floorTypeId, floorLevelId,
+                                      floorXMin, floorXMax, floorYMin, floorYMax)))
+                return false;
 
-                step = "exterior walls";
-                CreateExteriorWalls(doc, config, wallTypeId, wallBotLvlId, wallBotOffFt,
-                                    wallTopLvlId, wallTopOffFt,
-                                    x1, xN, y1, yM, wallOffsetFt);
+            if (!RunTransaction(doc, GridBuilderConstants.WallsTransactionName,
+                    () => CreateExteriorWalls(doc, config, wallTypeId, wallBotLvlId, wallBotOffFt,
+                                              wallTopLvlId, wallTopOffFt,
+                                              x1, xN, y1, yM, wallOffsetFt)))
+                return false;
+
+            if (!RunTransaction(doc, GridBuilderConstants.RoofTransactionName,
+                    () => CreateRoof(doc, config, roofTypeId, roofLevelId,
+                                     floorXMin, floorXMax, floorYMin, floorYMax)))
+                return false;
+
+            if (!RunTransaction(doc, GridBuilderConstants.ColumnsTransactionName,
+                    () => CreateColumns(doc, config, colBotLvlId, colBotOffFt, colTopLvlId, colTopOffFt,
+                                        xPositions, yMagnitudes, perimOffFt)))
+                return false;
 
                 // Force intermediate regeneration so wall geometry is committed to the
                 // model state before NewFootPrintRoof is called.  In the original
@@ -271,26 +277,40 @@ namespace GridBuilderAddin.Services
                 CreateRoof(doc, config, roofTypeId, roofLevelId,
                            floorXMin, floorXMax, floorYMin, floorYMax);
 
-                step = "structural columns";
-                CreateColumns(doc, config, colBotLvlId, colBotOffFt, colTopLvlId, colTopOffFt,
-                              xPositions, yMagnitudes, perimOffFt);
+        // ── Transaction helper ───────────────────────────────────────────────
 
-                transaction.Commit();
-                Debug.WriteLine("[StructureBuilder] Structure transaction committed.");
-                return true;
-            }
-            catch (Exception ex)
+        /// <summary>
+        /// Runs <paramref name="body"/> inside a named <see cref="Transaction"/> and commits it.
+        /// If an exception is thrown the transaction is rolled back, an error dialog is shown,
+        /// and <c>false</c> is returned.  All previously-committed transactions are unaffected.
+        /// </summary>
+        private static bool RunTransaction(Document doc, string transactionName, Action body)
+        {
+            // API unverified — check https://www.revitapidocs.com/2024/ before compiling.
+            // Transaction implements IDisposable; using ensures handles are released on every path.
+            using (var transaction = new Transaction(doc, transactionName))
             {
-                Debug.WriteLine($"[StructureBuilder] Structure transaction failed at {step}: {ex.Message}");
-                if (transaction.HasStarted() && !transaction.HasEnded())
-                    transaction.RollBack();
+                try
+                {
+                    transaction.Start();
+                    body();
+                    transaction.Commit();
+                    Debug.WriteLine($"[StructureBuilder] Transaction '{transactionName}' committed.");
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[StructureBuilder] Transaction '{transactionName}' failed: {ex.Message}");
+                    if (transaction.HasStarted() && !transaction.HasEnded())
+                        transaction.RollBack();
 
-                TaskDialog.Show(
-                    "Structure Builder — Error",
-                    $"Failed to create the {step}.\n\n" +
-                    $"Check that all selected types and levels are valid.\n\n" +
-                    $"Details:\n{ex.Message}");
-                return false;
+                    TaskDialog.Show(
+                        "Structure Builder — Error",
+                        $"{transactionName} failed.\n\n" +
+                        $"Check that all selected types and levels are valid.\n\n" +
+                        $"Details:\n{ex.Message}");
+                    return false;
+                }
             }
         }
 

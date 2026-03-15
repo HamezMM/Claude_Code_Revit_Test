@@ -60,6 +60,11 @@
     <MakeDir Directories="$(RevitAddinsFolder)" Condition="!Exists('$(RevitAddinsFolder)')" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(RevitAddinsFolder)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\PDG.Revit.ScheduleEditor.addin" DestinationFolder="$(RevitAddinsFolder)" SkipUnchangedFiles="true" />
+    <!-- Copy Syncfusion dependency DLLs so Revit can resolve them at runtime -->
+    <ItemGroup>
+      <SyncfusionDlls Include="$(TargetDir)Syncfusion*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SyncfusionDlls)" DestinationFolder="$(RevitAddinsFolder)" SkipUnchangedFiles="true" />
     <Message Text="――― ScheduleEditor Deploy ――― Done." Importance="high" />
   </Target>
 
