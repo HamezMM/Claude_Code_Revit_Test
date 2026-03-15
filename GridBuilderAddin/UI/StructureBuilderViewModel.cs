@@ -317,37 +317,52 @@ namespace GridBuilderAddin.UI
             double.TryParse(ColumnTopOffsetText,   out var colTopOff);
             double.TryParse(PerimeterOffsetText,   out var perimOff);
 
+            // Guard against WPF TwoWay SelectedItem null write-back that can occur after OnLoaded().
+            // Apply uniformly to every SelectedItem binding so no captured ID is ever 0 when
+            // the corresponding collection is non-empty (which validation guarantees).
+            var floorType      = SelectedFloorType    ?? FloorTypes.FirstOrDefault();
+            var floorLevel     = FloorLevel           ?? LevelItems.FirstOrDefault();
+            var roofType       = SelectedRoofType     ?? RoofTypes.FirstOrDefault();
+            var roofLevel      = RoofLevel            ?? LevelItems.LastOrDefault();
+            var wallType       = SelectedWallType     ?? WallTypes.FirstOrDefault();
+            var wallBotLevel   = WallBottomLevel      ?? LevelItems.FirstOrDefault();
+            var wallTopLevel   = WallTopLevel         ?? LevelItems.LastOrDefault();
+            var colBotLevel    = ColumnBottomLevel    ?? LevelItems.FirstOrDefault();
+            var colTopLevel    = ColumnTopLevel       ?? LevelItems.LastOrDefault();
+            var perimColType   = PerimeterColumnType  ?? ColumnTypes.FirstOrDefault();
+            var interiorColType = InteriorColumnType  ?? ColumnTypes.FirstOrDefault();
+
             return new StructureConfig
             {
-                FloorTypeId              = SelectedFloorType?.Id ?? 0,
-                FloorLevelId             = FloorLevel?.Id        ?? 0,
+                FloorTypeId              = floorType?.Id    ?? 0,
+                FloorLevelId             = floorLevel?.Id   ?? 0,
                 FloorLevelOffsetMm       = floorOff,
 
-                RoofTypeId               = SelectedRoofType?.Id  ?? 0,
-                RoofLevelId              = RoofLevel?.Id         ?? 0,
+                RoofTypeId               = roofType?.Id    ?? 0,
+                RoofLevelId              = roofLevel?.Id   ?? 0,
                 RoofLevelOffsetMm        = roofOff,
 
-                WallTypeId               = SelectedWallType?.Id  ?? 0,
+                WallTypeId               = wallType?.Id        ?? 0,
                 WallExteriorOffsetMm     = Math.Max(0, wallExtOff),
-                WallBottomLevelId        = WallBottomLevel?.Id   ?? 0,
+                WallBottomLevelId        = wallBotLevel?.Id   ?? 0,
                 WallBottomOffsetMm       = wallBotOff,
-                WallTopLevelId           = WallTopLevel?.Id      ?? 0,
+                WallTopLevelId           = wallTopLevel?.Id   ?? 0,
                 WallTopOffsetMm          = wallTopOff,
 
-                ColumnBottomLevelId      = ColumnBottomLevel?.Id ?? 0,
+                ColumnBottomLevelId      = colBotLevel?.Id    ?? 0,
                 ColumnBottomOffsetMm     = colBotOff,
-                ColumnTopLevelId         = ColumnTopLevel?.Id    ?? 0,
+                ColumnTopLevelId         = colTopLevel?.Id    ?? 0,
                 ColumnTopOffsetMm        = colTopOff,
 
                 HasPerimeterColumns      = true,   // always placed
-                PerimeterColumnTypeId    = PerimeterColumnType?.Id ?? 0,
+                PerimeterColumnTypeId    = perimColType?.Id    ?? 0,
                 PerimeterInteriorOffsetMm = Math.Max(0, perimOff),
 
                 HasMidpointColumns       = _hasMidpointColumns,
                 MidpointColumnTypeId     = MidpointColumnType?.Id ?? 0,
 
                 HasInteriorColumns       = true,   // always placed
-                InteriorColumnTypeId     = InteriorColumnType?.Id ?? 0
+                InteriorColumnTypeId     = interiorColType?.Id ?? 0
             };
         }
 
