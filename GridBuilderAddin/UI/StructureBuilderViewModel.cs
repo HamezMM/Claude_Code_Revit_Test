@@ -245,6 +245,35 @@ namespace GridBuilderAddin.UI
             Debug.WriteLine("[StructureBuilder] ViewModel initialised.");
         }
 
+        // ── Post-load initialisation ──────────────────────────────────────────
+
+        /// <summary>
+        /// Called from <see cref="StructureBuilderWindow"/> after the <c>Loaded</c> event fires.
+        /// Re-applies default selections for any property that WPF nulled during binding
+        /// initialisation (e.g. TwoWay SelectedItem write-back when ItemsSource first loads,
+        /// or shared-CollectionView current-item synchronisation for the LevelItems pickers).
+        /// </summary>
+        public void OnLoaded()
+        {
+            if (SelectedFloorType   == null) SelectedFloorType   = FloorTypes.FirstOrDefault();
+            if (FloorLevel          == null) FloorLevel          = LevelItems.FirstOrDefault();
+
+            if (SelectedRoofType    == null) SelectedRoofType    = RoofTypes.FirstOrDefault();
+            if (RoofLevel           == null) RoofLevel           = LevelItems.LastOrDefault();
+
+            if (SelectedWallType    == null) SelectedWallType    = WallTypes.FirstOrDefault();
+            if (WallBottomLevel     == null) WallBottomLevel     = LevelItems.FirstOrDefault();
+            if (WallTopLevel        == null) WallTopLevel        = LevelItems.LastOrDefault();
+
+            if (ColumnBottomLevel   == null) ColumnBottomLevel   = LevelItems.FirstOrDefault();
+            if (ColumnTopLevel      == null) ColumnTopLevel      = LevelItems.LastOrDefault();
+
+            if (PerimeterColumnType == null) PerimeterColumnType = ColumnTypes.FirstOrDefault();
+            if (InteriorColumnType  == null) InteriorColumnType  = ColumnTypes.FirstOrDefault();
+
+            Debug.WriteLine("[StructureBuilder] OnLoaded — selections refreshed after binding initialisation.");
+        }
+
         // ── Command handlers ──────────────────────────────────────────────────
 
         private void OnBuild()

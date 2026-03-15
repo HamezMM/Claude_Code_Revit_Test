@@ -194,6 +194,17 @@ namespace GridBuilderAddin.Services
 
             double wallOffsetFt = UnitUtils.ConvertToInternalUnits(config.WallExteriorOffsetMm, UnitTypeId.Millimeters);
 
+            // Validate that essential IDs are non-zero before constructing ElementIds.
+            // A zero ID means the UI selection was not captured correctly (e.g. WPF binding null
+            // write-back during ComboBox initialisation). Provide a clear error rather than letting
+            // Revit throw a generic ArgumentNullException from doc.GetElement.
+            if (config.RoofTypeId  <= 0) throw new InvalidOperationException(
+                "No roof type was captured from the UI (ID = 0). " +
+                "Please re-open the Structure Builder and ensure a roof type is selected.");
+            if (config.RoofLevelId <= 0) throw new InvalidOperationException(
+                "No roof host level was captured from the UI (ID = 0). " +
+                "Please re-open the Structure Builder and ensure a roof host level is selected.");
+
             // Resolve type and level ElementIds
             var floorTypeId   = new ElementId(config.FloorTypeId);
             var floorLevelId  = new ElementId(config.FloorLevelId);
