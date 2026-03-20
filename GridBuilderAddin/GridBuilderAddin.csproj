@@ -39,6 +39,9 @@
     <DebugSymbols>false</DebugSymbols>
     <Optimize>true</Optimize>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+  </ItemGroup>
 
   <!-- ── Revit API references ─────────────────────────────────────────── -->
   <!--
@@ -63,15 +66,9 @@
 
     <MakeDir Directories="$(RevitAddinsFolder)" Condition="!Exists('$(RevitAddinsFolder)')" />
 
-    <Copy
-      SourceFiles="$(TargetPath)"
-      DestinationFolder="$(RevitAddinsFolder)"
-      SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(RevitAddinsFolder)" SkipUnchangedFiles="true" />
 
-    <Copy
-      SourceFiles="$(MSBuildProjectDirectory)\GridBuilder.addin"
-      DestinationFolder="$(RevitAddinsFolder)"
-      SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\GridBuilder.addin" DestinationFolder="$(RevitAddinsFolder)" SkipUnchangedFiles="true" />
 
     <Message Text="――― GridBuilder Deploy ――― Done." Importance="high" />
   </Target>

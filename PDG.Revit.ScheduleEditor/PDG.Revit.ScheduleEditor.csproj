@@ -51,6 +51,7 @@
       key in App.OnStartup via SyncfusionLicenseProvider.RegisterLicense().
       Verify the latest version at https://www.nuget.org/packages/Syncfusion.SfGrid.WPF
     -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
     <PackageReference Include="Syncfusion.SfGrid.WPF" Version="22.1.38" />
   </ItemGroup>
 

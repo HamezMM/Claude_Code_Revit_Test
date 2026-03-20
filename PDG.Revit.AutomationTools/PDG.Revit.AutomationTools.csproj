@@ -43,6 +43,9 @@
     <DebugSymbols>false</DebugSymbols>
     <Optimize>true</Optimize>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+  </ItemGroup>
 
   <!-- ── Revit API references ─────────────────────────────────────────── -->
   <!--
@@ -84,16 +87,10 @@
     <MakeDir Directories="$(RevitAddinsFolder)" Condition="!Exists('$(RevitAddinsFolder)')" />
 
     <!-- Copy the compiled DLL -->
-    <Copy
-      SourceFiles="$(TargetPath)"
-      DestinationFolder="$(RevitAddinsFolder)"
-      SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(RevitAddinsFolder)" SkipUnchangedFiles="true" />
 
     <!-- Copy the .addin manifest so Revit discovers the assembly -->
-    <Copy
-      SourceFiles="$(MSBuildProjectDirectory)\PDG.AutomationTools.addin"
-      DestinationFolder="$(RevitAddinsFolder)"
-      SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\PDG.AutomationTools.addin" DestinationFolder="$(RevitAddinsFolder)" SkipUnchangedFiles="true" />
 
     <Message Text="――― PDG Deploy ――― Done." Importance="high" />
   </Target>

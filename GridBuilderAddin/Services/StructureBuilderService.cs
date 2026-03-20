@@ -174,9 +174,9 @@ namespace GridBuilderAddin.Services
         /// (an error dialog has already been shown identifying the failing step).</returns>
         public bool BuildStructure(Document doc, GridConfig gridConfig, StructureConfig config)
         {
-            if (doc        == null) throw new ArgumentNullException(nameof(doc));
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
             if (gridConfig == null) throw new ArgumentNullException(nameof(gridConfig));
-            if (config     == null) throw new ArgumentNullException(nameof(config));
+            if (config == null) throw new ArgumentNullException(nameof(config));
 
             Debug.WriteLine("[StructureBuilder] BuildStructure called.");
 
@@ -198,7 +198,7 @@ namespace GridBuilderAddin.Services
             // A zero ID means the UI selection was not captured correctly (e.g. WPF binding null
             // write-back during ComboBox initialisation). Provide a clear error rather than letting
             // Revit throw a generic ArgumentNullException from doc.GetElement.
-            if (config.RoofTypeId  <= 0) throw new InvalidOperationException(
+            if (config.RoofTypeId <= 0) throw new InvalidOperationException(
                 "No roof type was captured from the UI (ID = 0). " +
                 "Please re-open the Structure Builder and ensure a roof type is selected.");
             if (config.RoofLevelId <= 0) throw new InvalidOperationException(
@@ -206,21 +206,21 @@ namespace GridBuilderAddin.Services
                 "Please re-open the Structure Builder and ensure a roof host level is selected.");
 
             // Resolve type and level ElementIds
-            var floorTypeId   = new ElementId(config.FloorTypeId);
-            var floorLevelId  = new ElementId(config.FloorLevelId);
-            var roofTypeId    = new ElementId(config.RoofTypeId);
-            var roofLevelId   = new ElementId(config.RoofLevelId);
-            var wallTypeId    = new ElementId(config.WallTypeId);
-            var wallBotLvlId  = new ElementId(config.WallBottomLevelId);
-            var wallTopLvlId  = new ElementId(config.WallTopLevelId);
-            var colBotLvlId   = new ElementId(config.ColumnBottomLevelId);
-            var colTopLvlId   = new ElementId(config.ColumnTopLevelId);
+            var floorTypeId = new ElementId(config.FloorTypeId);
+            var floorLevelId = new ElementId(config.FloorLevelId);
+            var roofTypeId = new ElementId(config.RoofTypeId);
+            var roofLevelId = new ElementId(config.RoofLevelId);
+            var wallTypeId = new ElementId(config.WallTypeId);
+            var wallBotLvlId = new ElementId(config.WallBottomLevelId);
+            var wallTopLvlId = new ElementId(config.WallTopLevelId);
+            var colBotLvlId = new ElementId(config.ColumnBottomLevelId);
+            var colTopLvlId = new ElementId(config.ColumnTopLevelId);
 
             double wallBotOffFt = UnitUtils.ConvertToInternalUnits(config.WallBottomOffsetMm, UnitTypeId.Millimeters);
-            double wallTopOffFt = UnitUtils.ConvertToInternalUnits(config.WallTopOffsetMm,    UnitTypeId.Millimeters);
-            double colBotOffFt  = UnitUtils.ConvertToInternalUnits(config.ColumnBottomOffsetMm, UnitTypeId.Millimeters);
-            double colTopOffFt  = UnitUtils.ConvertToInternalUnits(config.ColumnTopOffsetMm,    UnitTypeId.Millimeters);
-            double perimOffFt   = UnitUtils.ConvertToInternalUnits(config.PerimeterInteriorOffsetMm, UnitTypeId.Millimeters);
+            double wallTopOffFt = UnitUtils.ConvertToInternalUnits(config.WallTopOffsetMm, UnitTypeId.Millimeters);
+            double colBotOffFt = UnitUtils.ConvertToInternalUnits(config.ColumnBottomOffsetMm, UnitTypeId.Millimeters);
+            double colTopOffFt = UnitUtils.ConvertToInternalUnits(config.ColumnTopOffsetMm, UnitTypeId.Millimeters);
+            double perimOffFt = UnitUtils.ConvertToInternalUnits(config.PerimeterInteriorOffsetMm, UnitTypeId.Millimeters);
 
             // Look up wall thickness to compute interior face for floor/roof boundary
             double wallThickFt = 0.0;
@@ -267,15 +267,16 @@ namespace GridBuilderAddin.Services
                                         xPositions, yMagnitudes, perimOffFt)))
                 return false;
 
-                // Force intermediate regeneration so wall geometry is committed to the
-                // model state before NewFootPrintRoof is called.  In the original
-                // 4-transaction design each commit triggered auto-regeneration; in the
-                // single-transaction design we must call it explicitly between steps.
-                doc.Regenerate();
+            // Force intermediate regeneration so wall geometry is committed to the
+            // model state before NewFootPrintRoof is called.  In the original
+            // 4-transaction design each commit triggered auto-regeneration; in the
+            // single-transaction design we must call it explicitly between steps.
+            doc.Regenerate();
 
-                step = "roof";
-                CreateRoof(doc, config, roofTypeId, roofLevelId,
-                           floorXMin, floorXMax, floorYMin, floorYMax);
+            step = "roof";
+            CreateRoof(doc, config, roofTypeId, roofLevelId,
+                       floorXMin, floorXMax, floorYMin, floorYMax);
+        }
 
         // ── Transaction helper ───────────────────────────────────────────────
 
