@@ -267,15 +267,8 @@ namespace GridBuilderAddin.Services
                                         xPositions, yMagnitudes, perimOffFt)))
                 return false;
 
-                // Force intermediate regeneration so wall geometry is committed to the
-                // model state before NewFootPrintRoof is called.  In the original
-                // 4-transaction design each commit triggered auto-regeneration; in the
-                // single-transaction design we must call it explicitly between steps.
-                doc.Regenerate();
-
-                step = "roof";
-                CreateRoof(doc, config, roofTypeId, roofLevelId,
-                           floorXMin, floorXMax, floorYMin, floorYMax);
+            return true;
+        }
 
         // ── Transaction helper ───────────────────────────────────────────────
 
